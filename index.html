@@ -1,0 +1,167 @@
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.16.0",
+    "@heroicons/react/": "https://aistudiocdn.com/@heroicons/react@^2.2.0/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.1.2",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.57.0",
+    "@tanstack/react-query": "https://aistudiocdn.com/@tanstack/react-query@^5.51.1",
+    "@tanstack/react-query-devtools": "https://aistudiocdn.com/@tanstack/react-query-devtools@^5.51.1",
+    "zustand": "https://aistudiocdn.com/zustand@^4.5.4",
+    "zustand/middleware": "https://aistudiocdn.com/zustand@^4.5.4/middleware",
+    "zustand/": "https://aistudiocdn.com/zustand@^5.0.8/",
+    "@tanstack/react-router": "https://aistudiocdn.com/@tanstack/react-router@^1.131.32",
+    "@tanstack/query-core": "https://aistudiocdn.com/@tanstack/query-core@^5.85.9"
+  }
+}
+</script>
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BioGas Plant Operations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root, [data-theme="default"] {
+        --color-primary: 30 58 138; /* Deep Blue */
+        --color-secondary: 16 185 129; /* Emerald Green */
+        --color-accent: 245 158 11; /* Amber */
+        --color-background: 249 250 251; /* Gray 50 */
+        --color-surface: 255 255 255; /* White */
+        --color-border: 229 231 235; /* Gray 200 */
+        --color-text-primary: 17 24 39; /* Gray 900 */
+        --color-text-secondary: 107 114 128; /* Gray 500 */
+        --color-primary-contrast: 255 255 255;
+        --color-secondary-contrast: 255 255 255;
+      }
+      [data-theme="default"][class="dark"] {
+        --color-primary: 99 102 241; /* Indigo 500 */
+        --color-secondary: 52 211 153; /* Emerald 400 */
+        --color-accent: 251 191 36; /* Amber 400 */
+        --color-background: 23 23 23; /* Neutral 900 */
+        --color-surface: 38 38 38; /* Neutral 800 */
+        --color-border: 64 64 64; /* Neutral 700 */
+        --color-text-primary: 245 245 245; /* Neutral 100 */
+        --color-text-secondary: 156 163 175; /* Neutral 400 */
+        --color-primary-contrast: 255 255 255;
+        --color-secondary-contrast: 0 0 0;
+      }
+      [data-theme="forest"] {
+        --color-primary: 22 101 52; /* Green 800 */
+        --color-secondary: 134 239 172; /* Green 300 */
+        --color-accent: 163 230 53; /* Lime 400 */
+        --color-background: 240 253 244; /* Green 50 */
+        --color-surface: 255 255 255; /* White */
+        --color-border: 220 252 231; /* Green 100 */
+        --color-text-primary: 20 83 45; /* Green 900 */
+        --color-text-secondary: 21 128 61; /* Green 700 */
+        --color-primary-contrast: 255 255 255;
+        --color-secondary-contrast: 20 83 45;
+      }
+      [data-theme="forest"][class="dark"] {
+        --color-primary: 134 239 172; /* Green 300 */
+        --color-secondary: 22 163 74; /* Green 600 */
+        --color-accent: 163 230 53; /* Lime 400 */
+        --color-background: 20 31 23; /* Dark Green-Gray */
+        --color-surface: 20 31 23; /* Same as background */
+        --color-border: 41 51 42; /* Darker Green-Gray */
+        --color-text-primary: 240 253 244; /* Green 50 */
+        --color-text-secondary: 156 163 175; /* Neutral 400 */
+        --color-primary-contrast: 20 31 23; /* Dark Green-Gray */
+        --color-secondary-contrast: 240 253 244; /* Green 50 */
+      }
+      [data-theme="ocean"] {
+        --color-primary: 30 64 175; /* Blue 800 */
+        --color-secondary: 14 165 233; /* Sky 500 */
+        --color-accent: 234 179 8; /* Amber 500 */
+        --color-background: 240 249 255; /* Sky 50 */
+        --color-surface: 255 255 255; /* White */
+        --color-border: 224 242 254; /* Sky 100 */
+        --color-text-primary: 17 24 39; /* Gray 900 */
+        --color-text-secondary: 71 85 105; /* Slate 600 */
+        --color-primary-contrast: 255 255 255;
+        --color-secondary-contrast: 255 255 255;
+      }
+      [data-theme="ocean"][class="dark"] {
+        --color-primary: 96 165 250; /* Blue 400 */
+        --color-secondary: 59 130 246; /* Blue 500 */
+        --color-accent: 250 204 21; /* Yellow 400 */
+        --color-background: 17 24 39; /* Gray 900 */
+        --color-surface: 31 41 55; /* Gray 800 */
+        --color-border: 55 65 81; /* Gray 700 */
+        --color-text-primary: 243 244 246; /* Gray 100 */
+        --color-text-secondary: 156 163 175; /* Gray 400 */
+        --color-primary-contrast: 17 24 39;
+        --color-secondary-contrast: 255 255 255;
+      }
+      [data-theme="contrast"] {
+        --color-primary: 0 0 0; /* Black */
+        --color-secondary: 80 80 80; /* Gray */
+        --color-accent: 217 119 6; /* Amber 600 */
+        --color-background: 255 255 255; /* White */
+        --color-surface: 255 255 255; /* White */
+        --color-border: 229 231 235; /* Gray 200 */
+        --color-text-primary: 0 0 0; /* Black */
+        --color-text-secondary: 82 82 82; /* Neutral 600 */
+        --color-primary-contrast: 255 255 255;
+        --color-secondary-contrast: 255 255 255;
+      }
+      [data-theme="contrast"][class="dark"] {
+        --color-primary: 255 255 255; /* White */
+        --color-secondary: 163 163 163; /* Neutral 400 */
+        --color-accent: 251 191 36; /* Amber 400 */
+        --color-background: 0 0 0; /* Black */
+        --color-surface: 23 23 23; /* Neutral 900 */
+        --color-border: 64 64 64; /* Neutral 700 */
+        --color-text-primary: 255 255 255; /* White */
+        --color-text-secondary: 212 212 212; /* Neutral 300 */
+        --color-primary-contrast: 0 0 0;
+        --color-secondary-contrast: 0 0 0;
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: 'rgb(var(--color-primary) / <alpha-value>)',
+              secondary: 'rgb(var(--color-secondary) / <alpha-value>)',
+              accent: 'rgb(var(--color-accent) / <alpha-value>)',
+              background: 'rgb(var(--color-background) / <alpha-value>)',
+              surface: 'rgb(var(--color-surface) / <alpha-value>)',
+              border: 'rgb(var(--color-border) / <alpha-value>)',
+              'text-primary': 'rgb(var(--color-text-primary) / <alpha-value>)',
+              'text-secondary': 'rgb(var(--color-text-secondary) / <alpha-value>)',
+              'primary-contrast': 'rgb(var(--color-primary-contrast) / <alpha-value>)',
+              'secondary-contrast': 'rgb(var(--color-secondary-contrast) / <alpha-value>)',
+              'success': '#22c55e',
+              'success-bg': 'rgb(34 197 94 / 0.1)',
+              'warning': '#f59e0b',
+              'warning-bg': 'rgb(245 158 11 / 0.1)',
+              'error': '#ef4444',
+              'error-bg': 'rgb(239 68 68 / 0.1)',
+            },
+            animation: {
+                'toast-in': 'toast-in 0.5s ease-in-out forwards',
+            },
+            keyframes: {
+                'toast-in': {
+                    'from': { transform: 'translateY(100%)', opacity: '0' },
+                    'to': { transform: 'translateY(0)', opacity: '1' },
+                }
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
