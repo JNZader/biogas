@@ -1,38 +1,35 @@
-
-
-
 import React, { lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { RouterProvider, createRouter, createRootRoute, createRoute, createHashHistory } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { QueryClient } from '@tanstack/query-core';
 
-import App from './App';
+import App from '@/App';
 
-// FIX: Removed .tsx extension from dynamic imports to fix module resolution errors in the browser.
-const HomePage = lazy(() => import('./pages/HomePage'));
-const GraphsPage = lazy(() => import('./pages/GraphsPage'));
-const FeedingPage = lazy(() => import('./pages/FeedingPage'));
-const MorePage = lazy(() => import('./pages/MorePage'));
-const InputsPage = lazy(() => import('./pages/InputsPage'));
-const GasQualityPage = lazy(() => import('./pages/GasQualityPage'));
-const LaboratoryPage = lazy(() => import('./pages/LaboratoryPage'));
-const PfQPage = lazy(() => import('./pages/PfQPage'));
-const EnvironmentPage = lazy(() => import('./pages/EnvironmentPage'));
-const EnergyRegistryPage = lazy(() => import('./pages/EnergyRegistryPage'));
-const ChpControlPage = lazy(() => import('./pages/ChpControlPage'));
-const MaintenancePage = lazy(() => import('./pages/MaintenancePage'));
-const StockPage = lazy(() => import('./pages/StockPage'));
-const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'));
-const SetupPage = lazy(() => import('./pages/SetupPage'));
-const ManagementPage = lazy(() => import('./pages/ManagementPage'));
-const AlarmsPage = lazy(() => import('./pages/AlarmsPage'));
-const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
-const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
-const UpdatePasswordPage = lazy(() => import('./pages/UpdatePasswordPage'));
-const ErrorDetectivePage = lazy(() => import('./pages/ErrorDetectivePage'));
+// FIX: Added absolute paths to fix module resolution errors in the browser.
+const HomePage = lazy(() => import('@/pages/HomePage'));
+const GraphsPage = lazy(() => import('@/pages/GraphsPage'));
+const FeedingPage = lazy(() => import('@/pages/FeedingPage'));
+const MorePage = lazy(() => import('@/pages/MorePage'));
+const InputsPage = lazy(() => import('@/pages/InputsPage'));
+const GasQualityPage = lazy(() => import('@/pages/GasQualityPage'));
+const LaboratoryPage = lazy(() => import('@/pages/LaboratoryPage'));
+const PfQPage = lazy(() => import('@/pages/PfQPage'));
+const EnvironmentPage = lazy(() => import('@/pages/EnvironmentPage'));
+const EnergyRegistryPage = lazy(() => import('@/pages/EnergyRegistryPage'));
+const ChpControlPage = lazy(() => import('@/pages/ChpControlPage'));
+const MaintenancePage = lazy(() => import('@/pages/MaintenancePage'));
+const StockPage = lazy(() => import('@/pages/StockPage'));
+const ProfileSettingsPage = lazy(() => import('@/pages/ProfileSettingsPage'));
+const SetupPage = lazy(() => import('@/pages/SetupPage'));
+const ManagementPage = lazy(() => import('@/pages/ManagementPage'));
+const AlarmsPage = lazy(() => import('@/pages/AlarmsPage'));
+const UserManagementPage = lazy(() => import('@/pages/UserManagementPage'));
+const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage'));
+const UpdatePasswordPage = lazy(() => import('@/pages/UpdatePasswordPage'));
+const ErrorDetectivePage = lazy(() => import('@/pages/ErrorDetectivePage'));
 
 
 const rootElement = document.getElementById('root');
@@ -73,37 +70,35 @@ const userManagementRoute = createRoute({ getParentRoute: () => rootRoute, path:
 const changePasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/change-password', component: ChangePasswordPage });
 const errorDetectiveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/error-detective', component: ErrorDetectivePage });
 
-// Create the route tree
-const routeTree = rootRoute.addChildren([
-  indexRoute,
-  loginRoute,
-  forgotPasswordRoute,
-  updatePasswordRoute,
-  graphsRoute,
-  feedingRoute,
-  inputsRoute,
-  // FIX: Corrected typo from 'gasQualityPage' to 'gasQualityRoute'. The undefined variable was causing a downstream type error in `createRouter`.
-  gasQualityRoute,
-  laboratoryRoute,
-  pfqRoute,
-  environmentRoute,
-  energyRoute,
-  chpRoute,
-  maintenanceRoute,
-  stockRoute,
-  moreRoute,
-  profileSettingsRoute,
-  setupRoute,
-  managementRoute,
-  alarmsRoute,
-  userManagementRoute,
-  changePasswordRoute,
-  errorDetectiveRoute,
-]);
-
-// Create the router using the v1 API standard
-const router = createRouter({ 
-  routeTree,
+// FIX: Inlined routeTree definition into createRouter to resolve a complex type inference issue.
+// The cryptic "strictNullChecks" error from TanStack Router often points to an invalid route tree,
+// and inlining can sometimes help TypeScript's compiler resolve the types correctly.
+const router = createRouter({
+  routeTree: rootRoute.addChildren([
+    indexRoute,
+    loginRoute,
+    forgotPasswordRoute,
+    updatePasswordRoute,
+    graphsRoute,
+    feedingRoute,
+    inputsRoute,
+    gasQualityRoute,
+    laboratoryRoute,
+    pfqRoute,
+    environmentRoute,
+    energyRoute,
+    chpRoute,
+    maintenanceRoute,
+    stockRoute,
+    moreRoute,
+    profileSettingsRoute,
+    setupRoute,
+    managementRoute,
+    alarmsRoute,
+    userManagementRoute,
+    changePasswordRoute,
+    errorDetectiveRoute,
+  ]),
   history: createHashHistory(),
 });
 

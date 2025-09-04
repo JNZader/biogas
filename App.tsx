@@ -9,15 +9,15 @@
 import React, { useEffect, Suspense } from 'react';
 import { Outlet, useRouterState } from '@tanstack/react-router';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import Header from './components/Header';
-import BottomNav from './components/BottomNav';
-import ErrorBoundary from './components/ErrorBoundary';
-import { Toaster } from './components/ui/Toaster';
-import { useThemeStore } from './stores/themeStore';
-import { SupabaseDataProvider } from './contexts/SupabaseContext';
-import { AuthProvider } from './contexts/AuthContext.tsx';
-import { cn } from './lib/utils';
-import Spinner from './components/ui/Spinner';
+import Header from '@/components/Header';
+import BottomNav from '@/components/BottomNav';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { Toaster } from '@/components/ui/Toaster';
+import { useThemeStore } from '@/stores/themeStore';
+import { SupabaseDataProvider } from '@/contexts/SupabaseContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
+import Spinner from '@/components/ui/Spinner';
 
 const pathTitleMap: { [key: string]: string } = {
   '/': 'Dashboard',
