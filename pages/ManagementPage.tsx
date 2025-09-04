@@ -1,13 +1,8 @@
-
 import React, { useState, useMemo } from 'react';
 import Page from '../components/Page';
-// FIX: Use named import for Card from the new UI component path.
 import { Card, CardContent } from '../components/ui/Card';
-// FIX: Use named import for Button from the new UI component path.
 import { Button } from '../components/ui/Button';
-// FIX: Replace deprecated Modal with new Dialog component.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/Dialog';
-// FIX: Replace deprecated InputField with new UI components.
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Textarea } from '../components/ui/Textarea';
@@ -23,6 +18,8 @@ import QuickAddModal, { FormField as QuickFormField } from '../components/QuickA
 import { useToast } from '../hooks/use-toast';
 import { Select } from '../components/ui/Select';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
+import { useAuth } from '../contexts/AuthContext';
+
 
 // --- Co-located Zod Schemas ---
 const camionSchema = z.object({
@@ -65,6 +62,7 @@ type Empresa = Database['public']['Tables']['empresa']['Row'];
 type Camion = Database['public']['Tables']['camiones']['Row'];
 type LugarDescarga = Database['public']['Tables']['lugares_descarga']['Row'];
 type Equipo = Database['public']['Tables']['equipos']['Row'];
+type ManagedEntity = Sustrato | Empresa | Camion | LugarDescarga | Equipo;
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
     <button
@@ -81,16 +79,17 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 
 const ManagementPage: React.FC = () => {
     const { sustratos, proveedores, camiones, lugaresDescarga, equipos, transportistas, loading: dataLoading, error: dataError, refreshData } = useSupabaseData();
+    const { activePlanta } = useAuth();
     const [activeTab, setActiveTab] = useState<Tab>('sustratos');
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [currentItem, setCurrentItem] = useState<any | null>(null);
+    const [currentItem, setCurrentItem] = useState<ManagedEntity | null>(null);
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
     const [formError, setFormError] = useState('');
     const [formLoading, setFormLoading] = useState(false);
     const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
     const { toast } = useToast();
     
-    const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; item: any | null }>({ isOpen: false, item: null });
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; item: ManagedEntity | null }>({ isOpen: false, item: null });
     const [deleteLoading, setDeleteLoading] = useState(false);
     
     const form = useForm<z.infer<typeof camionSchema>>({
@@ -109,13 +108,13 @@ const ManagementPage: React.FC = () => {
         return tab;
     };
 
-    const handleOpenModal = (mode: 'add' | 'edit', item: any | null = null) => {
+    const handleOpenModal = (mode: 'add' | 'edit', item: ManagedEntity | null = null) => {
         setModalMode(mode);
         setCurrentItem(item);
         setFormError('');
 
         if (activeTab === 'camiones') {
-             if (mode === 'edit' && item) {
+             if (mode === 'edit' && item && 'patente' in item) {
                 form.reset({
                     patente: item.patente || '',
                     marca: item.marca || '',
@@ -141,7 +140,7 @@ const ManagementPage: React.FC = () => {
         setCurrentItem(null);
     };
 
-    const openDeleteConfirmation = (item: any) => {
+    const openDeleteConfirmation = (item: ManagedEntity) => {
         setDeleteConfirmation({ isOpen: true, item });
     };
 
@@ -153,7 +152,8 @@ const ManagementPage: React.FC = () => {
         if (!deleteConfirmation.item) return;
         
         setDeleteLoading(true);
-        const { id } = deleteConfirmation.item;
+        // FIX: Cast item to a simple object with an id to satisfy TypeScript when destructuring from a complex union type.
+        const { id } = deleteConfirmation.item as { id: number };
         const tableName = getTableName(activeTab);
 
         try {
@@ -177,20 +177,15 @@ const ManagementPage: React.FC = () => {
 
         const tableName = getTableName(activeTab);
         
-        if(activeTab === 'proveedores'){
-            data.tipo_empresa = 'proveedor';
-        }
-        if(activeTab === 'transportistas'){
-            data.tipo_empresa = 'transportista';
-        }
-        if(activeTab === 'equipos') {
-            data.planta_id = '1'; // Hardcoded for demo
-        }
+        if(activeTab === 'proveedores'){ data.tipo_empresa = 'proveedor'; }
+        if(activeTab === 'transportistas'){ data.tipo_empresa = 'transportista'; }
+        // FIX: Cast `data` to `any` before assigning a number to prevent a type conflict with FormDataEntryValue (string | File).
+        if(activeTab === 'equipos' && activePlanta) { (data as any).planta_id = activePlanta.id; }
         
         try {
             if (modalMode === 'add') {
                 await createEntity({ tableName, data });
-            } else {
+            } else if (currentItem) {
                 await updateEntity({ tableName, data, id: currentItem.id });
             }
             
@@ -208,15 +203,12 @@ const ManagementPage: React.FC = () => {
         setFormError('');
         const tableName = 'camiones';
         
-        const data = {
-            ...values,
-            transportista_empresa_id: Number(values.transportista_empresa_id),
-        };
+        const data = { ...values, transportista_empresa_id: Number(values.transportista_empresa_id) };
         
         try {
             if (modalMode === 'add') {
                 await createEntity({ tableName, data });
-            } else {
+            } else if (currentItem) {
                 await updateEntity({ tableName, data, id: currentItem.id });
             }
             
@@ -231,21 +223,12 @@ const ManagementPage: React.FC = () => {
     
     const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
 
-    const getItemName = (item: any) => {
+    const getItemName = (item: ManagedEntity | null): string => {
         if (!item) return '';
-        switch (activeTab) {
-            case 'sustratos':
-            case 'proveedores':
-            case 'transportistas':
-            case 'lugaresDescarga':
-                return item.nombre;
-            case 'camiones':
-                return item.patente;
-            case 'equipos':
-                return item.nombre_equipo;
-            default:
-                return `ítem con ID ${item.id}`;
-        }
+        if ('nombre' in item) return item.nombre;
+        if ('patente' in item) return item.patente;
+        if ('nombre_equipo' in item) return item.nombre_equipo;
+        return `ítem con ID ${item.id}`;
     };
 
     const renderTable = () => {
@@ -373,18 +356,18 @@ const ManagementPage: React.FC = () => {
             case 'sustratos':
                 return (
                     <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem?.nombre} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={currentItem?.categoria} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="descripcion">Descripción</Label><Textarea id="descripcion" name="descripcion" defaultValue={currentItem?.descripcion} className={commonInputClasses} /></div>
+                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={'categoria' in currentItem ? currentItem.categoria : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="descripcion">Descripción</Label><Textarea id="descripcion" name="descripcion" defaultValue={'descripcion' in currentItem ? currentItem.descripcion : ''} className={commonInputClasses} /></div>
                     </>
                 );
             case 'proveedores':
             case 'transportistas':
                 return (
                      <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem?.nombre} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="razon_social">Razón Social</Label><Input id="razon_social" name="razon_social" type="text" defaultValue={currentItem?.razon_social} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="cuit">CUIT</Label><Input id="cuit" name="cuit" type="text" defaultValue={currentItem?.cuit} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="razon_social">Razón Social</Label><Input id="razon_social" name="razon_social" type="text" defaultValue={'razon_social' in currentItem ? currentItem.razon_social : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="cuit">CUIT</Label><Input id="cuit" name="cuit" type="text" defaultValue={'cuit' in currentItem ? currentItem.cuit : ''} className={commonInputClasses}/></div>
                     </>
                 );
             case 'camiones':
@@ -460,19 +443,19 @@ const ManagementPage: React.FC = () => {
              case 'lugaresDescarga':
                 return (
                      <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem?.nombre} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="tipo">Tipo</Label><Input id="tipo" name="tipo" type="text" defaultValue={currentItem?.tipo} placeholder="Ej: Playa, Tolva, Tanque" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="capacidad_m3">Capacidad (m³)</Label><Input id="capacidad_m3" name="capacidad_m3" type="number" min="0" defaultValue={currentItem?.capacidad_m3} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="tipo">Tipo</Label><Input id="tipo" name="tipo" type="text" defaultValue={'tipo' in currentItem ? currentItem.tipo : ''} placeholder="Ej: Playa, Tolva, Tanque" className={commonInputClasses}/></div>
+                        <div><Label htmlFor="capacidad_m3">Capacidad (m³)</Label><Input id="capacidad_m3" name="capacidad_m3" type="number" min="0" defaultValue={'capacidad_m3' in currentItem ? currentItem.capacidad_m3 : ''} className={commonInputClasses}/></div>
                     </>
                 );
             case 'equipos':
                 return (
                     <>
-                        <div><Label htmlFor="nombre_equipo">Nombre del Equipo</Label><Input id="nombre_equipo" name="nombre_equipo" type="text" defaultValue={currentItem?.nombre_equipo} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={currentItem?.categoria} placeholder="Ej: Bomba, Agitador" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="codigo_equipo">Código / Tag</Label><Input id="codigo_equipo" name="codigo_equipo" type="text" defaultValue={currentItem?.codigo_equipo} placeholder="Ej: P-001" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="marca">Marca</Label><Input id="marca" name="marca" type="text" defaultValue={currentItem?.marca} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="modelo">Modelo</Label><Input id="modelo" name="modelo" type="text" defaultValue={currentItem?.modelo} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="nombre_equipo">Nombre del Equipo</Label><Input id="nombre_equipo" name="nombre_equipo" type="text" defaultValue={'nombre_equipo' in currentItem ? currentItem.nombre_equipo : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={'categoria' in currentItem ? currentItem.categoria : ''} placeholder="Ej: Bomba, Agitador" className={commonInputClasses}/></div>
+                        <div><Label htmlFor="codigo_equipo">Código / Tag</Label><Input id="codigo_equipo" name="codigo_equipo" type="text" defaultValue={'codigo_equipo' in currentItem ? currentItem.codigo_equipo : ''} placeholder="Ej: P-001" className={commonInputClasses}/></div>
+                        <div><Label htmlFor="marca">Marca</Label><Input id="marca" name="marca" type="text" defaultValue={'marca' in currentItem ? currentItem.marca : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="modelo">Modelo</Label><Input id="modelo" name="modelo" type="text" defaultValue={'modelo' in currentItem ? currentItem.modelo : ''} className={commonInputClasses}/></div>
                     </>
                 );
             default: return null;

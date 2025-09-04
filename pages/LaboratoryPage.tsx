@@ -1,14 +1,8 @@
-
-
-
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Page from '../components/Page';
-// FIX: Use named import for Card from the new UI component path.
 import { Card, CardContent } from '../components/ui/Card';
-// FIX: Use named import for Button from the new UI component path.
 import { Button } from '../components/ui/Button';
-// FIX: Replace deprecated InputField with new UI components.
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
@@ -19,6 +13,7 @@ import type { Database } from '../types/database';
 import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { useToast } from '../hooks/use-toast.ts';
+import { useAuth } from '../contexts/AuthContext';
 
 
 type AnalisisLaboratorio = Database['public']['Tables']['analisis_laboratorio']['Row'];
@@ -27,135 +22,105 @@ type DetalleIngreso = Database['public']['Tables']['detalle_ingreso_sustrato']['
     ingresos_viaje_camion: { numero_remito_general: string | null } | null;
     sustratos: { nombre: string } | null;
 };
+type AnalisisLaboratorioInsert = Database['public']['Tables']['analisis_laboratorio']['Insert'];
+type AnalisisDetalleInsert = Database['public']['Tables']['analisis_laboratorio_detalle']['Insert'];
+
+// --- Co-located API Logic ---
+const fetchTiposMuestra = async (): Promise<TipoMuestra[]> => {
+    const { data, error } = await supabase.from('tipos_muestra').select('*');
+    if (error) throw error;
+    return data || [];
+};
+
+const fetchDetalleIngresos = async (): Promise<DetalleIngreso[]> => {
+    const { data, error } = await supabase.from('detalle_ingreso_sustrato').select('*, ingresos_viaje_camion(numero_remito_general), sustratos(nombre)').order('created_at', { ascending: false }).limit(50);
+    if (error) throw error;
+    return data as any || [];
+};
+
+const fetchAnalisisHistory = async (): Promise<AnalisisLaboratorio[]> => {
+    const { data, error } = await supabase.from('analisis_laboratorio').select('*, tipos_muestra ( nombre_tipo_muestra )').order('fecha_hora_registro', { ascending: false }).limit(15);
+    if (error) throw error;
+    return data as any || [];
+};
+
+const createAnalisis = async (analysisData: { main: AnalisisLaboratorioInsert, details: Omit<AnalisisDetalleInsert, 'analisis_laboratorio_id'>[] }) => {
+    const { data: newAnalysis, error: mainError } = await supabase
+        .from('analisis_laboratorio')
+        .insert(analysisData.main)
+        .select()
+        .single();
+
+    if (mainError) throw mainError;
+
+    if (analysisData.details.length > 0) {
+        const detailsToInsert = analysisData.details.map(d => ({ ...d, analisis_laboratorio_id: newAnalysis.id }));
+        const { error: detailError } = await supabase.from('analisis_laboratorio_detalle').insert(detailsToInsert);
+        if (detailError) throw detailError;
+    }
+};
+
 
 const LaboratoryPage: React.FC = () => {
     const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const { activePlanta, publicProfile } = useAuth();
     const { equipos, loading: dataLoading, error: dataError } = useSupabaseData();
-    const [isLoading, setIsLoading] = useState(false);
-    const [message, setMessage] = useState('');
-    const [detalleIngresos, setDetalleIngresos] = useState<DetalleIngreso[]>([]);
-    const [tiposMuestra, setTiposMuestra] = useState<TipoMuestra[]>([]);
-    const [history, setHistory] = useState<AnalisisLaboratorio[]>([]);
-    const [historyLoading, setHistoryLoading] = useState(true);
-    const [historyError, setHistoryError] = useState<string | null>(null);
     const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
-    const fetchDropdownData = useCallback(async () => {
-        try {
-            const [tiposMuestraRes, detalleIngresosRes] = await Promise.all([
-                supabase.from('tipos_muestra').select('*'),
-                supabase.from('detalle_ingreso_sustrato').select('*, ingresos_viaje_camion(numero_remito_general), sustratos(nombre)').order('created_at', { ascending: false }).limit(50)
-            ]);
+    const { data: tiposMuestra = [], isLoading: tiposLoading } = useQuery({ queryKey: ['tiposMuestra'], queryFn: fetchTiposMuestra });
+    const { data: detalleIngresos = [], isLoading: ingresosLoading } = useQuery({ queryKey: ['detalleIngresos'], queryFn: fetchDetalleIngresos });
+    const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({ queryKey: ['analisisHistory'], queryFn: fetchAnalisisHistory });
 
-            if (tiposMuestraRes.error) throw tiposMuestraRes.error;
-            if (detalleIngresosRes.error) throw detalleIngresosRes.error;
-
-            setTiposMuestra(tiposMuestraRes.data || []);
-            setDetalleIngresos(detalleIngresosRes.data as any || []);
-        } catch (error: any) {
-            setMessage(`Error cargando datos de formulario: ${error.message}`);
+    const mutation = useMutation({
+        mutationFn: createAnalisis,
+        onSuccess: () => {
+            toast({ title: 'Éxito', description: 'Análisis guardado con éxito!' });
+            queryClient.invalidateQueries({ queryKey: ['analisisHistory'] });
+            // Consider selective invalidation if performance is an issue
+        },
+        onError: (err: Error) => {
+            toast({ title: 'Error', description: `Error al guardar: ${err.message}`, variant: 'destructive' });
         }
-    }, []);
-
-    useEffect(() => {
-        fetchDropdownData();
-    }, [fetchDropdownData]);
-    
-    const fetchHistory = useCallback(async () => {
-        setHistoryLoading(true);
-        setHistoryError(null);
-        try {
-            const { data, error } = await supabase
-                .from('analisis_laboratorio')
-                .select(`
-                    *,
-                    tipos_muestra ( nombre_tipo_muestra )
-                `)
-                .order('fecha_hora_registro', { ascending: false })
-                .limit(15);
-
-            if (error) throw error;
-            setHistory(data as any);
-        } catch (err: any) {
-            setHistoryError(`Error al cargar el historial: ${err.message}`);
-        } finally {
-            setHistoryLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchHistory();
-    }, [fetchHistory]);
+    });
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        setIsLoading(true);
-        setMessage('');
+        const form = e.currentTarget;
+        if (!activePlanta || !publicProfile) {
+            toast({ title: 'Error', description: 'Usuario o planta no identificados.', variant: 'destructive' });
+            return;
+        }
 
-        const formData = new FormData(e.currentTarget);
+        const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
-
-        const fecha_hora_registro = new Date().toISOString();
-        const fecha_hora_muestra = `${data.date}T${data.time}:00`;
 
         const detalleIngresoId = data.detalle_ingreso_sustrato_id ? Number(data.detalle_ingreso_sustrato_id) : null;
         const selectedDetalle = detalleIngresoId ? detalleIngresos.find(d => d.id === detalleIngresoId) : null;
+        
+        const mainData: AnalisisLaboratorioInsert = {
+            planta_id: activePlanta.id,
+            usuario_analista_id: publicProfile.id,
+            fecha_hora_registro: new Date().toISOString(),
+            fecha_hora_muestra: `${data.date}T${data.time}:00`,
+            detalle_ingreso_sustrato_id: detalleIngresoId,
+            // FIX: Corrected property access from `numero_remito_asociado` to `numero_remito_general`.
+            numero_remito_asociado: selectedDetalle?.ingresos_viaje_camion?.numero_remito_general || null,
+            equipo_asociado_id: data.equipo_asociado_id ? Number(data.equipo_asociado_id) : null,
+            tipo_muestra_id: Number(data.sampleType),
+            peso_muestra_g: data.sampleWeight ? Number(data.sampleWeight) : null,
+            tiempo_analisis_segundos: data.analysisTime ? Number(data.analysisTime) : null,
+            temperatura_muestra_c: data.sampleTemp ? Number(data.sampleTemp) : null,
+            observaciones: data.observations.toString() || null,
+        };
 
-
-        try {
-            // Step 1: Insert the main analysis record
-            const { data: analysisData, error: analysisError } = await supabase
-                .from('analisis_laboratorio')
-                .insert({
-                    planta_id: 1, // Hardcoded for demo
-                    usuario_analista_id: 1, // Hardcoded for demo
-                    fecha_hora_registro,
-                    fecha_hora_muestra,
-                    detalle_ingreso_sustrato_id: detalleIngresoId,
-                    numero_remito_asociado: selectedDetalle?.ingresos_viaje_camion?.numero_remito_general || null,
-                    equipo_asociado_id: data.equipo_asociado_id ? Number(data.equipo_asociado_id) : null,
-                    tipo_muestra_id: Number(data.sampleType),
-                    peso_muestra_g: data.sampleWeight ? Number(data.sampleWeight) : null,
-                    tiempo_analisis_segundos: data.analysisTime ? Number(data.analysisTime) : null,
-                    temperatura_muestra_c: data.sampleTemp ? Number(data.sampleTemp) : null,
-                    observaciones: data.observations.toString() || null,
-                })
-                .select()
-                .single();
-
-            if (analysisError) throw analysisError;
-
-            // Step 2: Insert the detailed parameters
-            const parameters = [
-                { parametro: 'pH', valor: data.ph, unidad: null },
-                { parametro: 'Sólidos Totales', valor: data.totalSolids, unidad: '%' },
-            ];
-
-            const detailInserts = parameters
-                .filter(p => p.valor)
-                .map(p => ({
-                    analisis_laboratorio_id: analysisData.id,
-                    parametro: p.parametro,
-                    valor: Number(p.valor),
-                    unidad: p.unidad,
-                }));
-
-            if (detailInserts.length > 0) {
-                const { error: detailError } = await supabase
-                    .from('analisis_laboratorio_detalle')
-                    .insert(detailInserts);
-                if (detailError) throw detailError;
-            }
-
-            setMessage('Análisis guardado con éxito!');
-            e.currentTarget.reset();
-            fetchHistory();
-
-        } catch (error: any) {
-            setMessage(`Error al guardar el análisis: ${error.message}`);
-        } finally {
-            setIsLoading(false);
-        }
+        const detailData = [
+            { parametro: 'pH', valor: data.ph, unidad: null },
+            { parametro: 'Sólidos Totales', valor: data.totalSolids, unidad: '%' },
+        ].filter(p => p.valor).map(p => ({ parametro: p.parametro as string, valor: Number(p.valor), unidad: p.unidad }));
+        
+        await mutation.mutateAsync({ main: mainData, details: detailData });
+        form.reset();
     };
     
     const sampleTypeFormFields: QuickFormField[] = [
@@ -185,8 +150,8 @@ const LaboratoryPage: React.FC = () => {
                         
                         <div>
                             <Label htmlFor="detalle_ingreso_sustrato_id">Muestra de Ingreso (Opcional)</Label>
-                            <Select id="detalle_ingreso_sustrato_id" name="detalle_ingreso_sustrato_id" className={commonInputClasses}>
-                                <option value="">{detalleIngresos.length > 0 ? 'Seleccione un ingreso...' : 'Cargando ingresos...'}</option>
+                            <Select id="detalle_ingreso_sustrato_id" name="detalle_ingreso_sustrato_id" className={commonInputClasses} disabled={ingresosLoading}>
+                                <option value="">{ingresosLoading ? 'Cargando ingresos...' : 'Seleccione un ingreso...'}</option>
                                 {detalleIngresos.map(d => (
                                     <option key={d.id} value={d.id}>
                                         {`Remito ${d.ingresos_viaje_camion?.numero_remito_general || `ID ${d.id_viaje_ingreso_fk}`} - ${d.sustratos?.nombre || 'Sustrato'}`}
@@ -212,8 +177,8 @@ const LaboratoryPage: React.FC = () => {
                                     <PlusCircleIcon className="h-5 w-5" />
                                 </button>
                             </div>
-                            <Select id="sampleType" name="sampleType" required className={commonInputClasses}>
-                                <option value="">{tiposMuestra.length > 0 ? 'Seleccione tipo' : 'Cargando...'}</option>
+                            <Select id="sampleType" name="sampleType" required className={commonInputClasses} disabled={tiposLoading}>
+                                <option value="">{tiposLoading ? 'Cargando...' : 'Seleccione tipo'}</option>
                                 {tiposMuestra.map(t => <option key={t.id} value={t.id}>{t.nombre_tipo_muestra}</option>)}
                             </Select>
                         </div>
@@ -231,11 +196,8 @@ const LaboratoryPage: React.FC = () => {
                             <Textarea id="observations" name="observations" className={commonInputClasses} />
                         </div>
 
-                        {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
-
                         <div className="pt-4">
-                            {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
-                            <Button type="submit" variant="default" isLoading={isLoading || dataLoading} disabled={dataLoading}>Guardar Análisis</Button>
+                            <Button type="submit" variant="default" isLoading={mutation.isPending || dataLoading} disabled={dataLoading}>Guardar Análisis</Button>
                         </div>
                     </form>
                 </CardContent>
@@ -246,7 +208,7 @@ const LaboratoryPage: React.FC = () => {
                      {historyLoading ? (
                         <p className="text-center text-text-secondary">Cargando historial...</p>
                      ) : historyError ? (
-                        <p className="text-center text-red-500">{historyError}</p>
+                        <p className="text-center text-red-500">{historyError.message}</p>
                      ) : history.length === 0 ? (
                         <p className="text-center text-text-secondary py-4">No hay análisis registrados todavía.</p>
                      ) : (
@@ -284,7 +246,7 @@ const LaboratoryPage: React.FC = () => {
                 formFields={sampleTypeFormFields}
                 onSuccess={() => {
                     toast({ title: 'Éxito', description: 'Tipo de muestra añadido con éxito.' });
-                    fetchDropdownData(); // Re-fetch dropdown data
+                    queryClient.invalidateQueries({ queryKey: ['tiposMuestra'] });
                 }}
             />
         </Page>

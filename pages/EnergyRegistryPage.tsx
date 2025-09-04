@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -8,14 +8,14 @@ import type { Database } from '../types/database';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
+import { useAuth } from '../contexts/AuthContext';
 
 type EnergiaRecord = Database['public']['Tables']['energia']['Row'];
 
 // --- Co-located Zod Schema ---
-// FIX: Replaced z.coerce.number with z.number since the form's onChange handler already performs the coercion, fixing type inference issues.
 const energySchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
   total_gen: z.number().nonnegative({ message: "Debe ser un número no negativo." }).optional(),
@@ -29,34 +29,34 @@ const energySchema = z.object({
 
 type EnergyFormData = z.infer<typeof energySchema>;
 
+// --- Co-located API Logic ---
+const fetchEnergyHistory = async (plantaId: number): Promise<EnergiaRecord[]> => {
+    const { data, error } = await supabase
+        .from('energia')
+        .select('*')
+        .eq('planta_id', plantaId)
+        .order('fecha', { ascending: false })
+        .limit(15);
+    if (error) throw error;
+    return data || [];
+};
+
+// FIX: Changed the type of `recordData` to the correct Insert type for the 'energia' table.
+const createEnergyRecord = async (recordData: Database['public']['Tables']['energia']['Insert']) => {
+    const { error } = await supabase.from('energia').insert(recordData);
+    if (error) throw error;
+};
+
 const EnergyRegistryPage: React.FC = () => {
-    const [history, setHistory] = useState<EnergiaRecord[]>([]);
-    const [historyLoading, setHistoryLoading] = useState(true);
-    const [historyError, setHistoryError] = useState<string | null>(null);
     const { toast } = useToast();
-
-    const fetchHistory = useCallback(async () => {
-        setHistoryLoading(true);
-        setHistoryError(null);
-        try {
-            const { data, error } = await supabase
-                .from('energia')
-                .select('*')
-                .order('fecha', { ascending: false })
-                .limit(15);
-
-            if (error) throw error;
-            setHistory(data || []);
-        } catch (err: any) {
-            setHistoryError(`Error al cargar el historial: ${err.message}`);
-        } finally {
-            setHistoryLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchHistory();
-    }, [fetchHistory]);
+    const queryClient = useQueryClient();
+    const { activePlanta } = useAuth();
+    
+    const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({
+        queryKey: ['energyHistory', activePlanta?.id],
+        queryFn: () => fetchEnergyHistory(activePlanta!.id),
+        enabled: !!activePlanta,
+    });
 
     const form = useForm<EnergyFormData>({
         resolver: zodResolver(energySchema),
@@ -73,21 +73,7 @@ const EnergyRegistryPage: React.FC = () => {
     });
 
     const mutation = useMutation({
-        mutationFn: async (formData: EnergyFormData) => {
-            const insertData = {
-                planta_id: 1, // Hardcoded for demo
-                fecha: formData.date.toString(),
-                generacion_electrica_total_kwh_dia: formData.total_gen || null,
-                despacho_spot_smec_kwh_dia: formData.spot_dispatch || null,
-                totalizador_smec_kwh: formData.smec_total || null,
-                totalizador_chp_mwh: formData.chp_total || null,
-                horas_funcionamiento_motor_chp_dia: formData.motor_hours || null,
-                tiempo_funcionamiento_antorcha_s_dia: formData.torch_time || null,
-                flujo_biogas_kg_dia: formData.biogas_flow || null,
-            };
-            const { error } = await supabase.from('energia').insert(insertData);
-            if (error) throw error;
-        },
+        mutationFn: createEnergyRecord,
         onSuccess: () => {
             toast({ title: 'Éxito', description: 'Registro diario guardado con éxito!' });
             form.reset({
@@ -100,15 +86,30 @@ const EnergyRegistryPage: React.FC = () => {
                  torch_time: undefined,
                  biogas_flow: undefined,
             });
-            fetchHistory();
+            queryClient.invalidateQueries({ queryKey: ['energyHistory'] });
         },
         onError: (err: Error) => {
             toast({ title: 'Error', description: `Error al guardar el registro: ${err.message}`, variant: 'destructive' });
         }
     });
 
-    function onSubmit(data: EnergyFormData) {
-        mutation.mutate(data);
+    function onSubmit(formData: EnergyFormData) {
+        if (!activePlanta) {
+            toast({ title: 'Error', description: 'Planta no seleccionada.', variant: 'destructive' });
+            return;
+        }
+        const insertData = {
+            planta_id: activePlanta.id,
+            fecha: formData.date.toString(),
+            generacion_electrica_total_kwh_dia: formData.total_gen || null,
+            despacho_spot_smec_kwh_dia: formData.spot_dispatch || null,
+            totalizador_smec_kwh: formData.smec_total || null,
+            totalizador_chp_mwh: formData.chp_total || null,
+            horas_funcionamiento_motor_chp_dia: formData.motor_hours || null,
+            tiempo_funcionamiento_antorcha_s_dia: formData.torch_time || null,
+            flujo_biogas_kg_dia: formData.biogas_flow || null,
+        };
+        mutation.mutate(insertData);
     }
     
     const commonTableClasses = {
@@ -232,7 +233,7 @@ const EnergyRegistryPage: React.FC = () => {
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (
-                      <p className="text-center text-red-500">{historyError}</p>
+                      <p className="text-center text-red-500">{historyError.message}</p>
                    ) : history.length === 0 ? (
                       <p className="text-center text-text-secondary py-4">No hay registros de energía todavía.</p>
                    ) : (
