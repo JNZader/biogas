@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Page from '../components/Page';
-import Card from '../components/Card';
-import Button from '../components/Button';
-import InputField from '../components/InputField';
+// FIX: Use named import for Card from the new UI component path.
+import { Card, CardContent } from '../components/ui/Card';
+// FIX: Use named import for Button from the new UI component path.
+import { Button } from '../components/ui/Button';
+// FIX: Replace deprecated InputField with new UI components.
+import { Input } from '../components/ui/Input';
+import { Label } from '../components/ui/Label';
+import { Select } from '../components/ui/Select';
+import { Textarea } from '../components/ui/Textarea';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 
@@ -78,7 +84,8 @@ const ChpControlPage: React.FC = () => {
         fetchHistory();
     }
   };
-
+  
+  const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
   const commonTableClasses = {
       head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
       cell: "px-4 py-3 whitespace-nowrap text-sm",
@@ -87,65 +94,78 @@ const ChpControlPage: React.FC = () => {
   return (
     <Page className="space-y-6">
       <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-1">Carga de Potencia del Motor (CHP)</h2>
-        <p className="text-sm text-text-secondary mb-4">Registrar los cambios de potencia y sus motivos.</p>
-        
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField label="Fecha" id="date" name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} required />
-            <InputField label="Hora" id="time" name="time" type="time" defaultValue={new Date().toTimeString().slice(0, 5)} required />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField label="Potencia Inicial" id="initial_power" name="initial_power" type="number" unit="kW" required/>
-            <InputField label="Potencia Programada" id="programmed_power" name="programmed_power" type="number" unit="kW" required/>
-          </div>
-
-          <InputField label="Motivo del Cambio" id="reason" name="reason" type="select" options={motivos} required />
-          <InputField label="Observaciones" id="observations" name="observations" type="textarea" />
+        <CardContent className="pt-6">
+          <h2 className="text-lg font-semibold text-text-primary mb-1">Carga de Potencia del Motor (CHP)</h2>
+          <p className="text-sm text-text-secondary mb-4">Registrar los cambios de potencia y sus motivos.</p>
           
-          {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="date">Fecha</Label><Input id="date" name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} required className={commonInputClasses} /></div>
+              <div><Label htmlFor="time">Hora</Label><Input id="time" name="time" type="time" defaultValue={new Date().toTimeString().slice(0, 5)} required className={commonInputClasses} /></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="initial_power">Potencia Inicial (kW)</Label><Input id="initial_power" name="initial_power" type="number" min="0" required className={commonInputClasses}/></div>
+              <div><Label htmlFor="programmed_power">Potencia Programada (kW)</Label><Input id="programmed_power" name="programmed_power" type="number" min="0" required className={commonInputClasses}/></div>
+            </div>
 
-          <div className="pt-4">
-            <Button type="submit" variant="primary" isLoading={isLoading}>Guardar Cambio</Button>
-          </div>
-        </form>
+            <div>
+                <Label htmlFor="reason">Motivo del Cambio</Label>
+                <Select id="reason" name="reason" required className={commonInputClasses}>
+                    {motivos.map(motivo => <option key={motivo} value={motivo}>{motivo}</option>)}
+                </Select>
+            </div>
+            <div>
+                <Label htmlFor="observations">Observaciones</Label>
+                <Textarea id="observations" name="observations" className={commonInputClasses} />
+            </div>
+            
+            {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
+
+            <div className="pt-4">
+              {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
+              <Button type="submit" variant="default" isLoading={isLoading}>Guardar Cambio</Button>
+            </div>
+          </form>
+        </CardContent>
       </Card>
       <Card>
-        <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Cambios Recientes</h3>
-        {historyLoading ? (
-            <p className="text-center text-text-secondary">Cargando historial...</p>
-        ) : historyError ? (
-            <p className="text-center text-red-500">{historyError}</p>
-        ) : history.length === 0 ? (
-            <p className="text-center text-text-secondary py-4">No hay cambios de potencia registrados.</p>
-        ) : (
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-background">
-                        <tr>
-                            <th className={commonTableClasses.head}>Fecha y Hora</th>
-                            <th className={commonTableClasses.head}>Potencia (kW)</th>
-                            <th className={commonTableClasses.head}>Motivo</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-surface divide-y divide-border">
-                        {history.map(item => (
-                            <tr key={item.id}>
-                                <td className={`${commonTableClasses.cell} text-text-secondary`}>
-                                    {new Date(item.fecha_hora).toLocaleString('es-AR')}
-                                </td>
-                                <td className={`${commonTableClasses.cell} text-text-primary`}>
-                                    {item.potencia_inicial_kw} → {item.potencia_programada_kw}
-                                </td>
-                                <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>
-                                    {item.motivo_cambio}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        )}
+        <CardContent className="pt-6">
+          <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Cambios Recientes</h3>
+          {historyLoading ? (
+              <p className="text-center text-text-secondary">Cargando historial...</p>
+          ) : historyError ? (
+              <p className="text-center text-red-500">{historyError}</p>
+          ) : history.length === 0 ? (
+              <p className="text-center text-text-secondary py-4">No hay cambios de potencia registrados.</p>
+          ) : (
+              <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-border">
+                      <thead className="bg-background">
+                          <tr>
+                              <th className={commonTableClasses.head}>Fecha y Hora</th>
+                              <th className={commonTableClasses.head}>Potencia (kW)</th>
+                              <th className={commonTableClasses.head}>Motivo</th>
+                          </tr>
+                      </thead>
+                      <tbody className="bg-surface divide-y divide-border">
+                          {history.map(item => (
+                              <tr key={item.id}>
+                                  <td className={`${commonTableClasses.cell} text-text-secondary`}>
+                                      {new Date(item.fecha_hora).toLocaleString('es-AR')}
+                                  </td>
+                                  <td className={`${commonTableClasses.cell} text-text-primary`}>
+                                      {item.potencia_inicial_kw} → {item.potencia_programada_kw}
+                                  </td>
+                                  <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>
+                                      {item.motivo_cambio}
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+              </div>
+          )}
+        </CardContent>
       </Card>
     </Page>
   );

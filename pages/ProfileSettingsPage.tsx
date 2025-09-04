@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import Page from '../components/Page';
-import Card from '../components/Card';
-import Button from '../components/Button';
-import InputField from '../components/InputField';
-import ToggleSwitch from '../components/ToggleSwitch';
+// FIX: Corrected the import path for the Card component from the obsolete '../components/Card' to the correct '../components/ui/Card', resolving the module not found error.
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Label } from '../components/ui/Label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/Select';
+import { Switch } from '../components/ui/Switch';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
 import { useThemeStore } from '../stores/themeStore';
 import type { Palette } from '../stores/themeStore';
+import { Link } from '@tanstack/react-router';
+import { useAuth } from '../contexts/AuthContext';
 
 const PaletteButton: React.FC<{
     paletteName: Palette;
@@ -36,9 +41,11 @@ const PaletteButton: React.FC<{
 
 const ProfileSettingsPage: React.FC = () => {
     const { theme, setTheme, palette, setPalette } = useThemeStore();
+    const { publicProfile, signOut } = useAuth();
 
-    const [name, setName] = useState('Juan Pérez');
-    const [phone, setPhone] = useState('+54 9 11 1234-5678');
+    const [name, setName] = useState(publicProfile?.nombres || 'Usuario');
+    const [phone, setPhone] = useState(publicProfile?.telefono || '');
+    const [email, setEmail] = useState(publicProfile?.correo || '');
     const [language, setLanguage] = useState('es');
     const [timezone, setTimezone] = useState('gmt-3');
     const [emailNotifications, setEmailNotifications] = useState(true);
@@ -55,53 +62,56 @@ const ProfileSettingsPage: React.FC = () => {
             name: 'default', 
             label: 'Default', 
             light: { bg: '#F9FAFB', primary: '#1E3A8A', secondary: '#10B981' },
-            dark: { bg: '#171717', primary: '#6366f1', secondary: '#34d399' }
+            dark: { bg: '#171717', primary: '#6366f1', secondary: '#34d399' },
         },
         { 
             name: 'forest', 
             label: 'Bosque', 
             light: { bg: '#F0FDF4', primary: '#166534', secondary: '#86EFAC' },
-            dark: { bg: '#141f17', primary: '#86efac', secondary: '#16a34a' }
+            dark: { bg: '#141f17', primary: '#86efac', secondary: '#16a34a' },
         },
         { 
             name: 'ocean', 
             label: 'Océano', 
             light: { bg: '#F0F9FF', primary: '#1E40AF', secondary: '#0EA5E9' },
-            dark: { bg: '#111827', primary: '#60a5fa', secondary: '#3b82f6' }
+            dark: { bg: '#111827', primary: '#60a5fa', secondary: '#3b82f6' },
         },
         { 
             name: 'contrast', 
             label: 'Contraste', 
             light: { bg: '#FFFFFF', primary: '#000000', secondary: '#505050', border: '#000000' },
-            dark: { bg: '#000000', primary: '#FFFFFF', secondary: '#a3a3a3', border: '#FFFFFF' }
+            dark: { bg: '#000000', primary: '#FFFFFF', secondary: '#a3a3a3', border: '#FFFFFF' },
         },
     ];
 
     return (
         <Page className="space-y-6">
             <Card>
-                <div className="flex items-center space-x-4">
-                    <UserCircleIcon className="h-20 w-20 text-border" aria-hidden="true" />
-                    <div>
-                        <h2 className="text-xl font-bold text-text-primary">{name}</h2>
-                        <p className="text-text-secondary">Operador de Planta</p>
-                        <button className="mt-2 text-sm font-semibold text-primary hover:opacity-80">
-                            Cambiar Foto
-                        </button>
+                <CardContent className="p-4">
+                    <div className="flex items-center space-x-4">
+                        <UserCircleIcon className="h-20 w-20 text-border" aria-hidden="true" />
+                        <div>
+                            <h2 className="text-xl font-bold text-text-primary">{name}</h2>
+                            <p className="text-text-secondary">Operador de Planta</p>
+                            <Button variant="link" className="p-0 h-auto mt-2 text-sm">Cambiar Foto</Button>
+                        </div>
                     </div>
-                </div>
+                </CardContent>
             </Card>
 
             <Card>
-                <h3 className="text-lg font-semibold text-text-primary mb-4">Apariencia</h3>
-                <div className="space-y-6">
-                    <ToggleSwitch 
-                        label="Modo Oscuro"
-                        enabled={theme === 'dark'}
-                        setEnabled={(enabled) => setTheme(enabled ? 'dark' : 'light')}
-                    />
+                <CardHeader><CardTitle>Apariencia</CardTitle></CardHeader>
+                <CardContent className="space-y-6">
+                     <div className="flex items-center justify-between">
+                        <Label htmlFor="dark-mode">Modo Oscuro</Label>
+                        <Switch 
+                            id="dark-mode"
+                            checked={theme === 'dark'}
+                            onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+                        />
+                    </div>
                     <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-3">Paleta de Colores</label>
+                        <Label className="block text-sm font-medium text-text-secondary mb-3">Paleta de Colores</Label>
                         <div className="flex flex-wrap gap-4">
                             {palettes.map(p => (
                                 <PaletteButton 
@@ -115,64 +125,72 @@ const ProfileSettingsPage: React.FC = () => {
                             ))}
                         </div>
                     </div>
-                </div>
+                </CardContent>
             </Card>
 
             <Card>
-                <h3 className="text-lg font-semibold text-text-primary mb-4">Información Personal</h3>
-                <form className="space-y-4">
-                    <InputField label="Nombres" id="name" type="text" defaultValue={name} />
-                    <InputField label="Correo" id="email" type="email" defaultValue="juan.perez@biogascorp.com" />
-                    <InputField label="Teléfono" id="phone" type="tel" defaultValue={phone} />
-                </form>
-            </Card>
-
-            <Card>
-                <h3 className="text-lg font-semibold text-text-primary mb-4">Preferencias</h3>
-                <div className="space-y-4">
-                    <div>
-                        <label htmlFor="language" className="block text-sm font-medium text-text-secondary">Idioma</label>
-                        <select
-                            id="language"
-                            name="language"
-                            value={language}
-                            onChange={(e) => setLanguage(e.target.value)}
-                            className="mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-                        >
-                            <option value="es">Español</option>
-                            <option value="en">English</option>
-                        </select>
+                <CardHeader><CardTitle>Información Personal</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="name">Nombres</Label>
+                        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
                     </div>
-                     <div>
-                        <label htmlFor="timezone" className="block text-sm font-medium text-text-secondary">Zona Horaria</label>
-                        <select
-                            id="timezone"
-                            name="timezone"
-                            value={timezone}
-                            onChange={(e) => setTimezone(e.target.value)}
-                             className="mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-                        >
-                            <option value="gmt-3">GMT-3 (Buenos Aires)</option>
-                            <option value="gmt-5">GMT-5 (Bogotá, Lima)</option>
-                             <option value="gmt-8">GMT-8 (Pacific Time)</option>
-                        </select>
+                    <div className="space-y-2">
+                        <Label htmlFor="email">Correo</Label>
+                        <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                     </div>
-                </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="phone">Teléfono</Label>
+                        <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                    </div>
+                </CardContent>
             </Card>
 
             <Card>
-                <h3 className="text-lg font-semibold text-text-primary mb-4">Notificaciones</h3>
-                <div className="space-y-4">
-                    <ToggleSwitch label="Notificaciones por Email" enabled={emailNotifications} setEnabled={setEmailNotifications} />
-                    <ToggleSwitch label="Notificaciones Push" enabled={pushNotifications} setEnabled={setPushNotifications} />
-                </div>
+                <CardHeader><CardTitle>Preferencias</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="language">Idioma</Label>
+                        {/* FIX: Replaced onValueChange with onChange and simplified component structure */}
+                        <Select id="language" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                            <SelectItem value="es">Español</SelectItem>
+                            <SelectItem value="en">English</SelectItem>
+                        </Select>
+                    </div>
+                     <div className="space-y-2">
+                        <Label htmlFor="timezone">Zona Horaria</Label>
+                        {/* FIX: Replaced onValueChange with onChange and simplified component structure */}
+                        <Select id="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+                            <SelectItem value="gmt-3">GMT-3 (Buenos Aires)</SelectItem>
+                            <SelectItem value="gmt-5">GMT-5 (Bogotá, Lima)</SelectItem>
+                            <SelectItem value="gmt-8">GMT-8 (Pacific Time)</SelectItem>
+                        </Select>
+                    </div>
+                </CardContent>
             </Card>
 
-            <div className="space-y-3 pt-4">
-                <Button variant="primary">Guardar Cambios</Button>
-                <button className="w-full text-center text-sm font-medium text-error hover:opacity-80 py-2">
+            <Card>
+                <CardHeader><CardTitle>Notificaciones</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="email-notifications">Notificaciones por Email</Label>
+                        <Switch id="email-notifications" checked={emailNotifications} onCheckedChange={setEmailNotifications} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <Label htmlFor="push-notifications">Notificaciones Push</Label>
+                        <Switch id="push-notifications" checked={pushNotifications} onCheckedChange={setPushNotifications} />
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3 pt-4">
+                <Button>Guardar Cambios</Button>
+                <Link to="/change-password" className="w-full sm:w-auto">
+                    <Button variant="outline" className="w-full">Cambiar Contraseña</Button>
+                </Link>
+                <Button variant="destructive" className="sm:ml-auto" onClick={signOut}>
                     Cerrar Sesión
-                </button>
+                </Button>
             </div>
         </Page>
     );

@@ -1,14 +1,72 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Page from '../components/Page';
-import Card from '../components/Card';
-import Button from '../components/Button';
+import { Card, CardContent } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { getAIFeedingPrediction } from '../services/geminiService';
 import type { SubstrateAnalysis } from '../services/geminiService';
-import * as api from '../services/api';
-import { useNotificationStore } from '../stores/notificationStore';
+import { useToast } from '../hooks/use-toast';
 import type { Database } from '../types/database';
+import { supabase } from '../services/supabaseClient';
+import { useSupabaseData } from '../contexts/SupabaseContext';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
+import { Input } from '../components/ui/Input';
+import { Select } from '../components/ui/Select';
+import { Textarea } from '../components/ui/Textarea';
+import { PlusCircleIcon } from '@heroicons/react/24/outline';
+import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 
+
+// --- Co-located Zod Schemas ---
+// FIX: Replaced z.coerce.number with z.number since coercion is handled in the component's onChange event, resolving type inference issues with react-hook-form.
+// FIX: Replaced z.number().min(0) with z.number().nonnegative() for improved schema clarity and to prevent negative values.
+const analysisSchema = z.object({
+  lipids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  proteins: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  carbs: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  totalSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  volatileSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+});
+
+// FIX: Replaced z.coerce.number with z.number since coercion is handled in the component's onChange event, resolving type inference issues.
+const logFeedingSchema = z.object({
+    source: z.string().min(1, "Debe seleccionar un origen."),
+    destination: z.string().min(1, "Debe seleccionar un destino."),
+    quantity: z.number()
+          .positive({ message: "La cantidad debe ser mayor a cero." }),
+    unit: z.enum(['kg', 'm³']),
+    observations: z.string().optional(),
+});
+
+
+// --- Co-located API Logic ---
+const fetchAlimentacionHistory = async () => {
+    const { data, error } = await supabase
+        .from('alimentacion_biodigestor')
+        .select('*, equipo_origen:equipos!alimentacion_biodigestor_equipo_origen_id_fkey(nombre_equipo), equipo_destino:equipos!alimentacion_biodigestor_equipo_destino_id_fkey(nombre_equipo)')
+        .order('fecha_hora', { ascending: false }).limit(10);
+    if (error) throw error;
+    return data;
+};
+
+const createAlimentacion = async (formData: z.infer<typeof logFeedingSchema>) => {
+    const { error } = await supabase.from('alimentacion_biodigestor').insert({
+        planta_id: 1, usuario_operador_id: 1, fecha_hora: new Date().toISOString(),
+        equipo_origen_id: Number(formData.source),
+        equipo_destino_id: Number(formData.destination),
+        cantidad: formData.quantity,
+        unidad: formData.unit,
+        observaciones: formData.observations || null,
+    });
+    if (error) throw error;
+    return { success: true };
+};
+
+
+// --- Feature Components ---
 type AlimentacionRecord = Database['public']['Tables']['alimentacion_biodigestor']['Row'];
 interface EnrichedAlimentacionRecord extends AlimentacionRecord {
     equipo_origen?: { nombre_equipo: string } | null;
@@ -29,29 +87,27 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 );
 
 const AIPrediction: React.FC = () => {
-  const [analysis, setAnalysis] = useState<SubstrateAnalysis>({
-    lipids: 15,
-    proteins: 20,
-    carbs: 50,
-    totalSolids: 25,
-    volatileSolids: 80,
-  });
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setAnalysis(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
-  };
+  const form = useForm<z.infer<typeof analysisSchema>>({
+    resolver: zodResolver(analysisSchema),
+    defaultValues: {
+      lipids: 15,
+      proteins: 20,
+      carbs: 50,
+      totalSolids: 25,
+      volatileSolids: 80,
+    },
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: z.infer<typeof analysisSchema>) => {
     setIsLoading(true);
     setError('');
     setResult('');
     try {
-      const prediction = await getAIFeedingPrediction(analysis);
+      const prediction = await getAIFeedingPrediction(data);
       setResult(prediction);
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred.');
@@ -59,57 +115,73 @@ const AIPrediction: React.FC = () => {
       setIsLoading(false);
     }
   };
-  
-  const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-text-primary mb-4">Análisis de Sustrato para Predicción</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {Object.keys(analysis).map((key) => (
-          <div key={key}>
-            <label htmlFor={key} className="block text-sm font-medium text-text-secondary capitalize">
-              {key.replace(/([A-Z])/g, ' $1')} (%)
-            </label>
-            <input
-              type="number"
-              id={key}
-              name={key}
-              value={analysis[key as keyof SubstrateAnalysis]}
-              onChange={handleInputChange}
-              className={commonInputClasses}
-              step="0.1"
-            />
+      <CardContent className="pt-6">
+        <h2 className="text-lg font-semibold text-text-primary mb-4">Análisis de Sustrato para Predicción</h2>
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {Object.keys(form.getValues()).map((key) => (
+              <FormField
+                key={key}
+                control={form.control}
+                name={key as keyof z.infer<typeof analysisSchema>}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="capitalize">{key.replace(/([A-Z])/g, ' $1')} (%)</FormLabel>
+                    <FormControl>
+                      {/* FIX: Added an onChange handler to explicitly convert the input value to a number, ensuring type consistency with the Zod schema. */}
+                      <Input type="number" step="0.1" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+            <Button type="submit" isLoading={isLoading}>Obtener Recomendación de IA</Button>
+            </form>
+        </Form>
+        {error && <div className="mt-4 text-error bg-error-bg p-3 rounded-md">{error}</div>}
+        {result && (
+          <div className="mt-6 p-4 bg-background rounded-lg">
+            <h3 className="text-md font-semibold text-text-primary mb-2">Recomendación Generada</h3>
+            <div className="prose prose-sm max-w-none text-text-primary" dangerouslySetInnerHTML={{ __html: result.replace(/\n/g, '<br />') }} />
           </div>
-        ))}
-        <Button type="submit" isLoading={isLoading}>Obtener Recomendación de IA</Button>
-      </form>
-      {error && <div className="mt-4 text-error bg-error-bg p-3 rounded-md">{error}</div>}
-      {result && (
-        <div className="mt-6 p-4 bg-background rounded-lg">
-          <h3 className="text-md font-semibold text-text-primary mb-2">Recomendación Generada</h3>
-          <div className="prose prose-sm max-w-none text-text-primary" dangerouslySetInnerHTML={{ __html: result.replace(/\n/g, '<br />') }} />
-        </div>
-      )}
+        )}
+      </CardContent>
     </Card>
   );
 };
 
 const LogFeeding: React.FC = () => {
     const queryClient = useQueryClient();
-    const addNotification = useNotificationStore(s => s.addNotification);
+    const { toast } = useToast();
+    const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
-    const { data: equipos = [], isLoading: isEquiposLoading, error: equiposError } = useQuery({ queryKey: ['equipos'], queryFn: api.fetchEquipos });
-    const { data: history = [], isLoading: isHistoryLoading } = useQuery({ queryKey: ['alimentacionHistory'], queryFn: api.fetchAlimentacionHistory });
+    const { equipos, loading: isEquiposLoading, error: equiposError, refreshData } = useSupabaseData();
+    const { data: history = [], isLoading: isHistoryLoading } = useQuery({ queryKey: ['alimentacionHistory'], queryFn: fetchAlimentacionHistory });
+
+    const form = useForm<z.infer<typeof logFeedingSchema>>({
+        resolver: zodResolver(logFeedingSchema),
+        defaultValues: {
+            source: "",
+            destination: "",
+            quantity: undefined,
+            unit: "kg",
+            observations: "",
+        },
+    });
 
     const mutation = useMutation({
-        mutationFn: api.createAlimentacion,
+        mutationFn: createAlimentacion,
         onSuccess: () => {
-            addNotification('Registro guardado con éxito!', 'success');
+            toast({ title: 'Éxito', description: 'Registro guardado con éxito!' });
             queryClient.invalidateQueries({ queryKey: ['alimentacionHistory'] });
+            form.reset();
         },
         onError: (err: Error) => {
-            addNotification(`Error al guardar: ${err.message}`, 'error');
+            toast({ title: 'Error', description: `Error al guardar: ${err.message}`, variant: 'destructive' });
         }
     });
 
@@ -119,96 +191,170 @@ const LogFeeding: React.FC = () => {
         return { sources, destinations };
     }, [equipos]);
     
+    const equipmentFormFields: QuickFormField[] = [
+        { name: 'nombre_equipo', label: 'Nombre del Equipo', type: 'text', required: true },
+        { name: 'categoria', label: 'Categoría', type: 'text', required: true },
+        { name: 'codigo_equipo', label: 'Código / Tag', type: 'text' },
+    ];
 
-    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const formData = new FormData(e.currentTarget);
-        const data = Object.fromEntries(formData.entries());
+    function onSubmit(data: z.infer<typeof logFeedingSchema>) {
         mutation.mutate(data);
-        if(!mutation.isError) {
-            e.currentTarget.reset();
-        }
-    };
+    }
 
-    const commonSelectClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
     if (equiposError) {
-        return <Card><p className="text-error">{equiposError.message}</p></Card>
+        return <Card><p className="text-error">{equiposError}</p></Card>
     }
 
     return (
         <div className="space-y-6">
             <Card>
-                <h2 className="text-lg font-semibold text-text-primary mb-4">Registrar Alimentación Realizada</h2>
-                <form className="space-y-4" onSubmit={handleSubmit}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="source" className="block text-sm font-medium text-text-secondary">Fuente</label>
-                            <select id="source" name="source" required className={commonSelectClasses} disabled={isEquiposLoading}>
-                                 <option value="">{isEquiposLoading ? 'Cargando...' : 'Seleccione origen'}</option>
-                                 {sources.map(s => <option key={s.id} value={s.id}>{s.nombre_equipo}</option>)}
-                            </select>
+                <CardContent className="pt-6">
+                  <h2 className="text-lg font-semibold text-text-primary mb-4">Registrar Alimentación Realizada</h2>
+                  <Form {...form}>
+                    <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="source"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center justify-between">
+                                            <FormLabel>Fuente</FormLabel>
+                                            <button type="button" onClick={() => setIsQuickAddOpen(true)} className="text-primary hover:opacity-80 transition-opacity">
+                                                <PlusCircleIcon className="h-5 w-5" />
+                                            </button>
+                                        </div>
+                                        <FormControl>
+                                            <Select {...field} disabled={isEquiposLoading}>
+                                                <option value="">{isEquiposLoading ? 'Cargando...' : 'Seleccione origen'}</option>
+                                                {sources.map(s => <option key={s.id} value={String(s.id)}>{s.nombre_equipo}</option>)}
+                                            </Select>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="destination"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <div className="flex items-center justify-between">
+                                            <FormLabel>Destino (Biodigestor)</FormLabel>
+                                            <button type="button" onClick={() => setIsQuickAddOpen(true)} className="text-primary hover:opacity-80 transition-opacity">
+                                                <PlusCircleIcon className="h-5 w-5" />
+                                            </button>
+                                        </div>
+                                        <FormControl>
+                                            <Select {...field} disabled={isEquiposLoading}>
+                                                <option value="">{isEquiposLoading ? 'Cargando...' : 'Seleccione destino'}</option>
+                                                {destinations.map(d => <option key={d.id} value={String(d.id)}>{d.nombre_equipo}</option>)}
+                                            </Select>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                         </div>
                         <div>
-                            <label htmlFor="destination" className="block text-sm font-medium text-text-secondary">Destino (Biodigestor)</label>
-                            <select id="destination" name="destination" required className={commonSelectClasses} disabled={isEquiposLoading}>
-                                <option value="">{isEquiposLoading ? 'Cargando...' : 'Seleccione destino'}</option>
-                                {destinations.map(d => <option key={d.id} value={d.id}>{d.nombre_equipo}</option>)}
-                            </select>
+                            <FormLabel>Cantidad</FormLabel>
+                            <div className="flex items-start mt-2">
+                                <FormField
+                                    control={form.control}
+                                    name="quantity"
+                                    render={({ field }) => (
+                                        <FormItem className="w-2/3 flex-grow space-y-0">
+                                            <FormControl>
+                                                {/* FIX: Added an onChange handler to explicitly convert the input value to a number for type consistency. */}
+                                                <Input type="number" step="any" {...field} value={field.value ?? ''} className="rounded-r-none" placeholder="e.g., 5000" onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
+                                            </FormControl>
+                                            <FormMessage className="mt-2" />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="unit"
+                                    render={({ field }) => (
+                                        <FormItem className="w-1/3 space-y-0">
+                                            <FormControl>
+                                                <Select {...field} className="rounded-l-none">
+                                                    <option value="kg">kg</option>
+                                                    <option value="m³">m³</option>
+                                                </Select>
+                                            </FormControl>
+                                            <FormMessage className="mt-2"/>
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
                         </div>
-                    </div>
-                     <div>
-                        <label htmlFor="quantity" className="block text-sm font-medium text-text-secondary">Cantidad</label>
-                        <div className="flex">
-                            <input type="number" step="any" id="quantity" name="quantity" required className="mt-1 block w-2/3 px-3 py-2 bg-surface border border-border rounded-l-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm" />
-                            <select id="unit" name="unit" className="mt-1 block w-1/3 px-3 py-2 bg-background border border-l-0 border-border rounded-r-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm">
-                                <option>kg</option>
-                                <option>m³</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label htmlFor="observations" className="block text-sm font-medium text-text-secondary">Observaciones (Opcional)</label>
-                        <textarea id="observations" name="observations" rows={3} className="mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"></textarea>
-                    </div>
-
-                    <Button type="submit" variant="secondary" isLoading={mutation.isPending || isEquiposLoading} disabled={isEquiposLoading}>Guardar Registro</Button>
-                </form>
+                        <FormField
+                            control={form.control}
+                            name="observations"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Observaciones (Opcional)</FormLabel>
+                                    <FormControl>
+                                        <Textarea {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                      <Button type="submit" variant="secondary" isLoading={mutation.isPending || isEquiposLoading} disabled={isEquiposLoading}>Guardar Registro</Button>
+                  </form>
+                  </Form>
+                </CardContent>
             </Card>
 
             <Card>
-                <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Alimentación Reciente</h3>
-                {isHistoryLoading ? <p className="text-center text-text-secondary">Cargando historial...</p> : (
-                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-border">
-                             <thead className="bg-background">
-                                 <tr>
-                                     <th className={commonTableClasses.head}>Fecha</th>
-                                     <th className={commonTableClasses.head}>Origen</th>
-                                     <th className={commonTableClasses.head}>Destino</th>
-                                     <th className={`${commonTableClasses.head} text-right`}>Cantidad</th>
-                                 </tr>
-                             </thead>
-                             <tbody className="bg-surface divide-y divide-border">
-                                {history.length === 0 ? (
-                                    <tr><td colSpan={4} className="text-center py-4 text-text-secondary">No hay registros de alimentación.</td></tr>
-                                ) : history.map(item => (
-                                    <tr key={item.id}>
-                                        <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora!).toLocaleString('es-AR')}</td>
-                                        <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A'}</td>
-                                        <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A'}</td>
-                                        <td className={`${commonTableClasses.cell} text-text-primary font-medium text-right`}>{item.cantidad} {item.unidad}</td>
-                                    </tr>
-                                ))}
-                             </tbody>
-                        </table>
-                    </div>
-                )}
+                <CardContent className="pt-6">
+                    <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Alimentación Reciente</h3>
+                    {isHistoryLoading ? <p className="text-center text-text-secondary">Cargando historial...</p> : (
+                         <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-border">
+                                 <thead className="bg-background">
+                                     <tr>
+                                         <th className={commonTableClasses.head}>Fecha</th>
+                                         <th className={commonTableClasses.head}>Origen</th>
+                                         <th className={commonTableClasses.head}>Destino</th>
+                                         <th className={`${commonTableClasses.head} text-right`}>Cantidad</th>
+                                     </tr>
+                                 </thead>
+                                 <tbody className="bg-surface divide-y divide-border">
+                                    {history.length === 0 ? (
+                                        <tr><td colSpan={4} className="text-center py-4 text-text-secondary">No hay registros de alimentación.</td></tr>
+                                    ) : history.map(item => (
+                                        <tr key={item.id}>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora!).toLocaleString('es-AR')}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A'}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A'}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary font-medium text-right`}>{item.cantidad} {item.unidad}</td>
+                                        </tr>
+                                    ))}
+                                 </tbody>
+                            </table>
+                        </div>
+                    )}
+                </CardContent>
             </Card>
+             <QuickAddModal
+                isOpen={isQuickAddOpen}
+                onClose={() => setIsQuickAddOpen(false)}
+                entityName="Equipo"
+                tableName="equipos"
+                formFields={equipmentFormFields}
+                onSuccess={() => {
+                    toast({ title: 'Éxito', description: 'Equipo añadido con éxito.' });
+                    refreshData();
+                }}
+            />
         </div>
     );
 };

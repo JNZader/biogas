@@ -18,6 +18,7 @@ export interface Database {
           fecha_hora: string
           id: number
           observaciones: string | null
+          planta_id: number
           tipo_aditivo: string
           usuario_operador_id: number
         }
@@ -28,6 +29,7 @@ export interface Database {
           fecha_hora: string
           id?: number
           observaciones?: string | null
+          planta_id: number
           tipo_aditivo: string
           usuario_operador_id: number
         }
@@ -38,6 +40,7 @@ export interface Database {
           fecha_hora?: string
           id?: number
           observaciones?: string | null
+          planta_id?: number
           tipo_aditivo?: string
           usuario_operador_id?: number
         }
@@ -46,6 +49,12 @@ export interface Database {
             foreignKeyName: "aditivos_biodigestor_equipo_fkey"
             columns: ["equipo_id"]
             referencedRelation: "equipos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aditivos_biodigestor_planta_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
             referencedColumns: ["id"]
           },
           {
@@ -206,6 +215,7 @@ export interface Database {
           numero_replica: number
           observaciones: string | null
           ph: number | null
+          planta_id: number
           relacion_fos_tac: number | null
           tac_mg_l: number | null
           updated_at: string | null
@@ -222,6 +232,7 @@ export interface Database {
           numero_replica?: number
           observaciones?: string | null
           ph?: number | null
+          planta_id: number
           relacion_fos_tac?: never
           tac_mg_l?: never
           updated_at?: string | null
@@ -238,6 +249,7 @@ export interface Database {
           numero_replica?: number
           observaciones?: string | null
           ph?: number | null
+          planta_id?: number
           relacion_fos_tac?: never
           tac_mg_l?: never
           updated_at?: string | null
@@ -250,6 +262,12 @@ export interface Database {
             foreignKeyName: "analisis_fos_tac_equipo_fkey"
             columns: ["equipo_id"]
             referencedRelation: "equipos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analisis_fos_tac_planta_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
             referencedColumns: ["id"]
           },
           {
@@ -1178,6 +1196,7 @@ export interface Database {
           id: number
           o2_porcentaje: number | null
           observaciones: string | null
+          planta_id: number
           potencia_exacta_kw: number | null
           presion_mbar: number | null
           temperatura_c: number | null
@@ -1197,6 +1216,7 @@ export interface Database {
           id?: number
           o2_porcentaje?: number | null
           observaciones?: string | null
+          planta_id: number
           potencia_exacta_kw?: number | null
           presion_mbar?: number | null
           temperatura_c?: number | null
@@ -1216,6 +1236,7 @@ export interface Database {
           id?: number
           o2_porcentaje?: number | null
           observaciones?: string | null
+          planta_id?: number
           potencia_exacta_kw?: number | null
           presion_mbar?: number | null
           temperatura_c?: number | null
@@ -1227,6 +1248,12 @@ export interface Database {
             foreignKeyName: "lecturas_gas_equipo_fkey"
             columns: ["equipo_id_fk"]
             referencedRelation: "equipos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lecturas_gas_planta_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
             referencedColumns: ["id"]
           },
           {
@@ -1294,6 +1321,7 @@ export interface Database {
           hora_inicio: string | null
           id: number
           observaciones: string | null
+          planta_id: number
           requiere_seguimiento: boolean | null
           tiempo_inactividad_equipo_horas: number | null
           tipo_mantenimiento_id: number
@@ -1313,6 +1341,7 @@ export interface Database {
           hora_inicio?: string | null
           id?: number
           observaciones?: string | null
+          planta_id: number
           requiere_seguimiento?: boolean | null
           tiempo_inactividad_equipo_horas?: number | null
           tipo_mantenimiento_id: number
@@ -1332,6 +1361,7 @@ export interface Database {
           hora_inicio?: string | null
           id?: number
           observaciones?: string | null
+          planta_id?: number
           requiere_seguimiento?: boolean | null
           tiempo_inactividad_equipo_horas?: number | null
           tipo_mantenimiento_id?: number
@@ -1343,6 +1373,12 @@ export interface Database {
             foreignKeyName: "mantenimiento_eventos_equipo_fkey"
             columns: ["equipo_id"]
             referencedRelation: "equipos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mantenimiento_eventos_planta_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
             referencedColumns: ["id"]
           },
           {
@@ -1524,6 +1560,7 @@ export interface Database {
           motivo: string
           numero_documento: string | null
           observaciones: string | null
+          planta_id: number
           repuesto_id: number
           tipo_movimiento: string
           usuario_responsable_id: number | null
@@ -1537,6 +1574,7 @@ export interface Database {
           motivo: string
           numero_documento?: string | null
           observaciones?: string | null
+          planta_id: number
           repuesto_id: number
           tipo_movimiento: string
           usuario_responsable_id?: number | null
@@ -1550,6 +1588,7 @@ export interface Database {
           motivo?: string
           numero_documento?: string | null
           observaciones?: string | null
+          planta_id?: number
           repuesto_id?: number
           tipo_movimiento?: string
           usuario_responsable_id?: number | null
@@ -1559,6 +1598,12 @@ export interface Database {
             foreignKeyName: "movimientos_stock_mantenimiento_fkey"
             columns: ["mantenimiento_evento_id"]
             referencedRelation: "mantenimiento_eventos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movimientos_stock_planta_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
             referencedColumns: ["id"]
           },
           {
@@ -1621,6 +1666,7 @@ export interface Database {
           id: number
           nivel_m: number | null
           observaciones: string | null
+          planta_id: number
           solidos_totales_mg_l: number | null
           temperatura_c: number | null
           updated_at: string | null
@@ -1634,6 +1680,7 @@ export interface Database {
           id?: number
           nivel_m?: number | null
           observaciones?: string | null
+          planta_id: number
           solidos_totales_mg_l?: number | null
           temperatura_c?: number | null
           updated_at?: string | null
@@ -1647,6 +1694,7 @@ export interface Database {
           id?: number
           nivel_m?: number | null
           observaciones?: string | null
+          planta_id?: number
           solidos_totales_mg_l?: number | null
           temperatura_c?: number | null
           updated_at?: string | null
@@ -1657,6 +1705,12 @@ export interface Database {
             foreignKeyName: "pfq_equipo_fkey"
             columns: ["equipo_id_fk"]
             referencedRelation: "equipos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pfq_planta_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
             referencedColumns: ["id"]
           },
           {
@@ -1867,6 +1921,7 @@ export interface Database {
           id: number
           nombre: string
           ph_promedio: number | null
+          planta_id: number | null
           potencial_biogas_m3_ton: number | null
           updated_at: string | null
         }
@@ -1880,6 +1935,7 @@ export interface Database {
           id?: number
           nombre: string
           ph_promedio?: number | null
+          planta_id?: number | null
           potencial_biogas_m3_ton?: number | null
           updated_at?: string | null
         }
@@ -1893,10 +1949,18 @@ export interface Database {
           id?: number
           nombre?: string
           ph_promedio?: number | null
+          planta_id?: number | null
           potencial_biogas_m3_ton?: number | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sustratos_planta_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       tareas_mantenimiento: {
         Row: {
@@ -2139,6 +2203,43 @@ export interface Database {
             foreignKeyName: "usuarios_direccion_fkey"
             columns: ["direccion_id"]
             referencedRelation: "direcciones"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      usuarios_plantas: {
+        Row: {
+          created_at: string
+          id: number
+          planta_id: number
+          rol: string
+          usuario_id: number
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          planta_id: number
+          rol?: string
+          usuario_id: number
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          planta_id?: number
+          rol?: string
+          usuario_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usuarios_plantas_planta_id_fkey"
+            columns: ["planta_id"]
+            referencedRelation: "plantas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usuarios_plantas_usuario_id_fkey"
+            columns: ["usuario_id"]
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           }
         ]

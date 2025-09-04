@@ -1,4 +1,3 @@
-
 import React from 'react';
 // FIX: Updated package name from '@tanstack/router' to '@tanstack/react-router'.
 import { Link } from '@tanstack/react-router';

@@ -1,7 +1,9 @@
 
+
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { ExclamationTriangleIcon } from '@heroicons/react/24/solid';
-import Button from './Button';
+// FIX: Use named import for Button from the new UI component path.
+import { Button } from './ui/Button';
 
 interface Props {
   children: ReactNode;
@@ -38,8 +40,9 @@ class ErrorBoundary extends Component<Props, State> {
                 <p className="text-text-secondary mb-6">
                     Se ha producido un error inesperado en la aplicación. Por favor, recarga la página para continuar.
                 </p>
+                {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
                 <Button 
-                    variant="primary" 
+                    variant="default" 
                     onClick={() => window.location.reload()}
                     className="w-auto px-6"
                 >

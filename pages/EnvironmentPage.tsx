@@ -1,8 +1,14 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Page from '../components/Page';
-import Card from '../components/Card';
-import Button from '../components/Button';
-import InputField from '../components/InputField';
+// FIX: Use named import for Card from the new UI component path.
+import { Card, CardContent } from '../components/ui/Card';
+// FIX: Use named import for Button from the new UI component path.
+import { Button } from '../components/ui/Button';
+// FIX: Replace deprecated InputField with new UI components.
+import { Input } from '../components/ui/Input';
+import { Label } from '../components/ui/Label';
+import { Select } from '../components/ui/Select';
+import { Textarea } from '../components/ui/Textarea';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
@@ -48,7 +54,7 @@ const EnvironmentPage: React.FC = () => {
                     parametro_medido,
                     monitoreos_ambientales ( fecha_monitoreo )
                 `)
-                .limit(500)
+                .limit(500);
 
             if (error) throw error;
             
@@ -71,7 +77,8 @@ const EnvironmentPage: React.FC = () => {
         } finally {
             setChartLoading(false);
         }
-    }, []); // Removed chartParameter dependency to avoid re-fetching on select change
+    // biome-ignore lint/correctness/useExhaustiveDependencies: We only want to fetch all data once on mount; filtering is handled in useMemo.
+    }, []);
 
     useEffect(() => {
         fetchChartData();
@@ -88,7 +95,7 @@ const EnvironmentPage: React.FC = () => {
             .map(d => ({
                 name: new Date(d.monitoreos_ambientales!.fecha_monitoreo + 'T00:00:00').toLocaleDateString('es-AR', { month: 'short', day: 'numeric' }),
                 'Límite': d.limite_normativo,
-                'Medición': d.valor
+                'Medición': d.valor,
             }));
 
         return { parameterOptions: options, processedChartData: sortedAndFilteredData };
@@ -105,7 +112,7 @@ const EnvironmentPage: React.FC = () => {
             parametro_medido: parametro,
             valor: parseFloat(valor),
             unidad_medida: unidad,
-            cumple_normativa: cumple
+            cumple_normativa: cumple,
         };
         setDetails(prev => [...prev, newDetail]);
         setParametro('');
@@ -167,110 +174,123 @@ const EnvironmentPage: React.FC = () => {
     return (
     <Page className="space-y-6">
       <Card>
-        <h2 className="text-lg font-semibold text-text-primary mb-1">Monitoreo Ambiental</h2>
-        <p className="text-sm text-text-secondary mb-4">Cargar resultados de monitoreos y visualizar tendencias.</p>
-        
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputField label="Fecha Monitoreo" id="date" name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} required />
-            <InputField label="Tipo de Monitoreo" id="monitoringType" name="monitoringType" type="select" options={['Emisiones', 'Ruido', 'Agua', 'Suelo']} required/>
-          </div>
-
-          <fieldset className="border-t border-border pt-4 mt-4">
-            <legend className="text-base font-semibold text-text-primary mb-2">Parámetros Medidos</legend>
-             <div className="p-3 bg-background rounded-lg space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                    <div className="md:col-span-2">
-                        <label htmlFor="param" className="block text-sm font-medium text-text-secondary">Parámetro</label>
-                        <input type="text" id="param" value={parametro} onChange={e => setParametro(e.target.value)} className={inputClasses} placeholder="Ej: PM10" />
-                    </div>
-                    <div>
-                        <label htmlFor="value" className="block text-sm font-medium text-text-secondary">Valor</label>
-                        <input type="number" step="any" id="value" value={valor} onChange={e => setValor(e.target.value)} className={inputClasses} placeholder="12.5"/>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                        <div>
-                            <label htmlFor="unit" className="block text-sm font-medium text-text-secondary">Unidad</label>
-                            <input type="text" id="unit" value={unidad} onChange={e => setUnidad(e.target.value)} className={inputClasses} placeholder="µg/m³" />
-                        </div>
-                        <div className="flex items-center ml-auto pt-6">
-                            <input type="checkbox" id="compliant" checked={cumple} onChange={e => setCumple(e.target.checked)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
-                            <label htmlFor="compliant" className="text-sm font-medium text-text-primary ml-2">Cumple</label>
-                        </div>
-                    </div>
-                 </div>
-                 <Button type="button" onClick={handleAddDetail} variant="secondary" className="w-auto px-3 py-1.5 text-sm">
-                    <PlusCircleIcon className="h-5 w-5 mr-1" /> Añadir Parámetro
-                </Button>
-             </div>
-            
-            {details.length > 0 && (
-                <div className="mt-4 space-y-2">
-                    {details.map(d => (
-                        <div key={d.tempId} className="flex items-center justify-between p-2 bg-primary/10 rounded-md text-sm">
-                            <div>
-                                <span className="font-medium">{d.parametro_medido}: </span>
-                                <span className="text-text-primary">{d.valor} {d.unidad_medida}</span>
-                                <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${d.cumple_normativa ? 'bg-success-bg text-success' : 'bg-error-bg text-error'}`}>
-                                    {d.cumple_normativa ? 'Cumple' : 'No Cumple'}
-                                </span>
-                            </div>
-                            <button type="button" onClick={() => handleRemoveDetail(d.tempId)} className="p-1 rounded-full hover:bg-error-bg">
-                                <TrashIcon className="h-5 w-5 text-error" />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-          </fieldset>
-
-          <InputField label="Observaciones Generales" id="observations" name="observations" type="textarea" placeholder="Anotar condiciones climáticas u otras observaciones relevantes..." />
+        <CardContent className="pt-6">
+          <h2 className="text-lg font-semibold text-text-primary mb-1">Monitoreo Ambiental</h2>
+          <p className="text-sm text-text-secondary mb-4">Cargar resultados de monitoreos y visualizar tendencias.</p>
           
-          {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="date">Fecha Monitoreo</Label><Input id="date" name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} required className={inputClasses}/></div>
+              <div>
+                <Label htmlFor="monitoringType">Tipo de Monitoreo</Label>
+                <Select id="monitoringType" name="monitoringType" required className={inputClasses}>
+                    {['Emisiones', 'Ruido', 'Agua', 'Suelo'].map(type => <option key={type} value={type}>{type}</option>)}
+                </Select>
+              </div>
+            </div>
 
-          <div className="pt-4">
-            <Button type="submit" variant="primary" isLoading={isLoading} disabled={isLoading}>Guardar Monitoreo</Button>
-          </div>
-        </form>
+            <fieldset className="border-t border-border pt-4 mt-4">
+              <legend className="text-base font-semibold text-text-primary mb-2">Parámetros Medidos</legend>
+               <div className="p-3 bg-background rounded-lg space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                      <div className="md:col-span-2">
+                          <Label htmlFor="param">Parámetro</Label>
+                          <Input type="text" id="param" value={parametro} onChange={e => setParametro(e.target.value)} className={inputClasses} placeholder="Ej: PM10" />
+                      </div>
+                      <div>
+                          <Label htmlFor="value">Valor</Label>
+                          <Input type="number" step="any" id="value" value={valor} onChange={e => setValor(e.target.value)} className={inputClasses} placeholder="12.5" min="0"/>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                          <div>
+                              <Label htmlFor="unit">Unidad</Label>
+                              <Input type="text" id="unit" value={unidad} onChange={e => setUnidad(e.target.value)} className={inputClasses} placeholder="µg/m³" />
+                          </div>
+                          <div className="flex items-center ml-auto pt-6">
+                              <input type="checkbox" id="compliant" checked={cumple} onChange={e => setCumple(e.target.checked)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                              <Label htmlFor="compliant" className="text-sm font-medium text-text-primary ml-2">Cumple</Label>
+                          </div>
+                      </div>
+                   </div>
+                   <Button type="button" onClick={handleAddDetail} variant="secondary" className="w-auto px-3 py-1.5 text-sm">
+                      <PlusCircleIcon className="h-5 w-5 mr-1" /> Añadir Parámetro
+                  </Button>
+               </div>
+              
+              {details.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                      {details.map(d => (
+                          <div key={d.tempId} className="flex items-center justify-between p-2 bg-primary/10 rounded-md text-sm">
+                              <div>
+                                  <span className="font-medium">{d.parametro_medido}: </span>
+                                  <span className="text-text-primary">{d.valor} {d.unidad_medida}</span>
+                                  <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${d.cumple_normativa ? 'bg-success-bg text-success' : 'bg-error-bg text-error'}`}>
+                                      {d.cumple_normativa ? 'Cumple' : 'No Cumple'}
+                                  </span>
+                              </div>
+                              <button type="button" onClick={() => handleRemoveDetail(d.tempId)} className="p-1 rounded-full hover:bg-error-bg">
+                                  <TrashIcon className="h-5 w-5 text-error" />
+                              </button>
+                          </div>
+                      ))}
+                  </div>
+              )}
+            </fieldset>
+
+            <div>
+                <Label htmlFor="observations">Observaciones Generales</Label>
+                <Textarea id="observations" name="observations" placeholder="Anotar condiciones climáticas u otras observaciones relevantes..." className={inputClasses} />
+            </div>
+            
+            {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
+
+            <div className="pt-4">
+              {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
+              <Button type="submit" variant="default" isLoading={isLoading} disabled={isLoading}>Guardar Monitoreo</Button>
+            </div>
+          </form>
+        </CardContent>
       </Card>
 
       <Card className="mt-6">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
-            <h3 className="text-lg font-semibold text-text-primary">Tendencia Anual de Parámetros</h3>
-            {parameterOptions.length > 0 && (
-                <select 
-                    value={chartParameter} 
-                    onChange={e => setChartParameter(e.target.value)}
-                    className={`${inputClasses} mt-2 sm:mt-0 sm:w-auto`}
-                    aria-label="Seleccionar parámetro para visualizar"
-                >
-                    {parameterOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-            )}
-        </div>
-        {chartLoading ? (
-            <div className="text-center text-text-secondary py-10">Cargando datos del gráfico...</div>
-        ) : chartError ? (
-             <div className="text-center text-red-500 py-10">{`Error al cargar el gráfico: ${chartError}`}</div>
-        ) : processedChartData.length === 0 ? (
-            <div className="text-center text-text-secondary py-10">
-                {parameterOptions.length > 0 ? `No hay datos para el parámetro "${chartParameter}".` : 'No hay datos de monitoreo para mostrar.'}
-            </div>
-        ) : (
-            <div style={{ width: '100%', height: 300 }}>
-              <ResponsiveContainer>
-                  <LineChart data={processedChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="Medición" stroke="#1E3A8A" dot={false} strokeWidth={2} />
-                      <Line type="monotone" dataKey="Límite" stroke="#EF4444" strokeDasharray="5 5" dot={false} strokeWidth={2} />
-                  </LineChart>
-              </ResponsiveContainer>
-            </div>
-        )}
+        <CardContent className="pt-6">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
+              <h3 className="text-lg font-semibold text-text-primary">Tendencia Anual de Parámetros</h3>
+              {parameterOptions.length > 0 && (
+                  <select 
+                      value={chartParameter} 
+                      onChange={e => setChartParameter(e.target.value)}
+                      className={`${inputClasses} mt-2 sm:mt-0 sm:w-auto`}
+                      aria-label="Seleccionar parámetro para visualizar"
+                  >
+                      {parameterOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+              )}
+          </div>
+          {chartLoading ? (
+              <div className="text-center text-text-secondary py-10">Cargando datos del gráfico...</div>
+          ) : chartError ? (
+               <div className="text-center text-red-500 py-10">{`Error al cargar el gráfico: ${chartError}`}</div>
+          ) : processedChartData.length === 0 ? (
+              <div className="text-center text-text-secondary py-10">
+                  {parameterOptions.length > 0 ? `No hay datos para el parámetro "${chartParameter}".` : 'No hay datos de monitoreo para mostrar.'}
+              </div>
+          ) : (
+              <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                    <LineChart data={processedChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="Medición" stroke="#1E3A8A" dot={false} strokeWidth={2} />
+                        <Line type="monotone" dataKey="Límite" stroke="#EF4444" strokeDasharray="5 5" dot={false} strokeWidth={2} />
+                    </LineChart>
+                </ResponsiveContainer>
+              </div>
+          )}
+        </CardContent>
       </Card>
     </Page>
   );
