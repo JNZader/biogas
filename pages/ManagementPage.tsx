@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
@@ -155,9 +156,9 @@ const ManagementPage: React.FC = () => {
         if (!deleteConfirmation.item) return;
         
         setDeleteLoading(true);
-        // FIX: Replaced a faulty destructuring assignment with direct property access.
-        // This resolves a TypeScript error where the item's complex union type was inferred as 'never'.
-        const id = deleteConfirmation.item.id;
+        // FIX: The compiler incorrectly infers the item's complex union type as 'never'.
+        // Using a structural type assertion to safely access the 'id' property.
+        const id = (deleteConfirmation.item as { id: number }).id;
         const tableName = getTableName(activeTab);
 
         try {
