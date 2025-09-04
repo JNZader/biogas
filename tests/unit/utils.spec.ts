@@ -2,6 +2,8 @@
  * @jest-environment jsdom
  */
 import { exportToCsv } from '../../lib/utils';
+// FIX: Import test runner functions from Vitest to resolve 'Cannot find name' errors.
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('exportToCsv', () => {
   // Mock browser APIs

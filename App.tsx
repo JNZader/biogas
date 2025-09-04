@@ -1,3 +1,11 @@
+/**
+ * @file This is the root component of the application.
+ * It sets up the main layout, including the header and bottom navigation,
+ * which are conditionally rendered based on the current route. It also initializes
+ * global providers like Auth, SupabaseData, and ErrorBoundary, and handles
+ * dynamic page title updates.
+ */
+
 import React, { useEffect } from 'react';
 // FIX: Updated package name from '@tanstack/router' to '@tanstack/react-router'.
 import { Outlet, useRouterState } from '@tanstack/react-router';
@@ -37,8 +45,18 @@ const pathTitleMap: { [key: string]: string } = {
   '/change-password': 'Cambiar Contraseña',
 };
 
+/**
+ * Determines the page title based on the current URL pathname.
+ * @param {string} pathname - The current route's pathname.
+ * @returns {string} The corresponding page title or a default title.
+ */
 const getPageTitle = (pathname: string) => pathTitleMap[pathname] || 'BioGas Ops';
 
+/**
+ * The main application component that wraps all pages.
+ * It manages the overall page structure, conditional rendering of navigation elements,
+ * and initialization of context providers and global state.
+ */
 const App: React.FC = () => {
   // This initializes the theme from the store as soon as the app loads
   useThemeStore(); 

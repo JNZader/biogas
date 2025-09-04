@@ -4,6 +4,8 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
+// FIX: Import test runner functions from Vitest to resolve 'Cannot find name' errors.
+import { describe, it, expect, vi } from 'vitest';
 import { KpiCard } from '../../pages/HomePage'; // The component is co-located here
 import type { KpiCardProps } from '../../types';
 import { BoltIcon } from '@heroicons/react/24/outline';

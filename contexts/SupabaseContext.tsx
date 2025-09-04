@@ -1,3 +1,9 @@
+/**
+ * @file This file provides a React Context for fetching and caching shared data from Supabase.
+ * It centralizes data loading for common entities like equipment, suppliers, and substrates,
+ * making them available throughout the application via a custom hook `useSupabaseData`.
+ * This approach reduces redundant data fetching and simplifies data access in components.
+ */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
@@ -79,6 +85,13 @@ interface SupabaseDataContextType {
 
 const SupabaseDataContext = createContext<SupabaseDataContextType | undefined>(undefined);
 
+/**
+ * Provides shared Supabase data to all child components.
+ * It fetches data once when the active plant is identified and makes it available via the `useSupabaseData` hook.
+ * It also exposes a `refreshData` function to manually re-fetch all data.
+ * @param {object} props - The component props.
+ * @param {React.ReactNode} props.children - The child components to be rendered within the provider.
+ */
 export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { user, activePlanta, loading: authLoading } = useAuth();
     const [sustratos, setSustratos] = useState<Sustrato[]>([]);
@@ -172,6 +185,11 @@ export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ 
     );
 };
 
+/**
+ * Custom hook to access the shared Supabase data from the context.
+ * Must be used within a `SupabaseDataProvider`.
+ * @returns {SupabaseDataContextType} The context value, including data arrays, loading state, and error state.
+ */
 export const useSupabaseData = () => {
     const context = useContext(SupabaseDataContext);
     if (context === undefined) {

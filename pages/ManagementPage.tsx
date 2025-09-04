@@ -157,7 +157,7 @@ const ManagementPage: React.FC = () => {
         setDeleteLoading(true);
         // FIX: Replaced a faulty destructuring assignment with direct property access.
         // This resolves a TypeScript error where the item's complex union type was inferred as 'never'.
-        const id = (deleteConfirmation.item as any).id;
+        const id = deleteConfirmation.item.id;
         const tableName = getTableName(activeTab);
 
         try {

@@ -1,3 +1,7 @@
+/**
+ * @file This file contains the service for interacting with the Google Gemini API.
+ * It provides a function to get AI-powered feeding predictions for the biogas plant.
+ */
 
 import { GoogleGenAI } from "@google/genai";
 
@@ -7,14 +11,28 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
+/**
+ * Represents the analysis of a substrate used for biogas production.
+ */
 export interface SubstrateAnalysis {
+  /** Percentage of lipids in the substrate. */
   lipids: number;
+  /** Percentage of proteins in the substrate. */
   proteins: number;
+  /** Percentage of carbohydrates in the substrate. */
   carbs: number;
+  /** Percentage of total solids (TS) in the substrate. */
   totalSolids: number;
+  /** Percentage of volatile solids (VS) as a fraction of total solids. */
   volatileSolids: number;
 }
 
+/**
+ * Calls the Gemini AI model to get an optimal feeding recommendation.
+ * @param {SubstrateAnalysis} analysis - The substrate analysis data.
+ * @returns {Promise<string>} A promise that resolves to the AI-generated recommendation in markdown format.
+ * @throws {Error} Throws an error if the API call fails or the API key is not configured.
+ */
 export const getAIFeedingPrediction = async (analysis: SubstrateAnalysis): Promise<string> => {
   if (!process.env.API_KEY) {
     return Promise.reject("API key is not configured.");
