@@ -70,35 +70,36 @@ const userManagementRoute = createRoute({ getParentRoute: () => rootRoute, path:
 const changePasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/change-password', component: ChangePasswordPage });
 const errorDetectiveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/error-detective', component: ErrorDetectivePage });
 
-// FIX: Inlined routeTree definition into createRouter to resolve a complex type inference issue.
-// The cryptic "strictNullChecks" error from TanStack Router often points to an invalid route tree,
-// and inlining can sometimes help TypeScript's compiler resolve the types correctly.
+// FIX: The cryptic "strictNullChecks" error from TanStack Router often points to an invalid route tree.
+// Defining the tree separately can sometimes help TypeScript resolve the complex types correctly.
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  forgotPasswordRoute,
+  updatePasswordRoute,
+  graphsRoute,
+  feedingRoute,
+  inputsRoute,
+  gasQualityRoute,
+  laboratoryRoute,
+  pfqRoute,
+  environmentRoute,
+  energyRoute,
+  chpRoute,
+  maintenanceRoute,
+  stockRoute,
+  moreRoute,
+  profileSettingsRoute,
+  setupRoute,
+  managementRoute,
+  alarmsRoute,
+  userManagementRoute,
+  changePasswordRoute,
+  errorDetectiveRoute,
+]);
+
 const router = createRouter({
-  routeTree: rootRoute.addChildren([
-    indexRoute,
-    loginRoute,
-    forgotPasswordRoute,
-    updatePasswordRoute,
-    graphsRoute,
-    feedingRoute,
-    inputsRoute,
-    gasQualityRoute,
-    laboratoryRoute,
-    pfqRoute,
-    environmentRoute,
-    energyRoute,
-    chpRoute,
-    maintenanceRoute,
-    stockRoute,
-    moreRoute,
-    profileSettingsRoute,
-    setupRoute,
-    managementRoute,
-    alarmsRoute,
-    userManagementRoute,
-    changePasswordRoute,
-    errorDetectiveRoute,
-  ]),
+  routeTree,
   history: createHashHistory(),
 });
 

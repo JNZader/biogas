@@ -7,7 +7,7 @@ import { ChevronRightIcon, UserCircleIcon, Cog6ToothIcon, ChevronDownIcon, Users
 import { 
     FireIcon, BeakerIcon, DocumentTextIcon, SunIcon, WrenchScrewdriverIcon, 
     ArchiveBoxIcon, CpuChipIcon, BoltIcon, AdjustmentsHorizontalIcon, ChartBarIcon, 
-    BuildingOfficeIcon, DocumentPlusIcon, BellAlertIcon, BugAntIcon
+    BuildingOfficeIcon, DocumentPlusIcon, BellAlertIcon
 } from '@heroicons/react/24/outline';
 import { create } from 'zustand';
 import { useAuthorization } from '../hooks/useAuthorization';
@@ -23,7 +23,6 @@ const useMorePageStore = create<MorePageState>((set) => ({
         'Operaciones Diarias': true,
         'Análisis y Reportes': false,
         'Gestión del Sistema': false,
-        'Herramientas de Diagnóstico': true,
     },
     toggleSection: (title) => set((state) => ({
         openSections: {
@@ -111,10 +110,6 @@ const MorePage: React.FC = () => {
         { to: '/setup', icon: <Cog6ToothIcon className={iconClass}/>, title: 'Configuración Inicial', subtitle: 'Configurar parámetros de la planta', permission: 'setup' },
     ];
     
-    const diagnosticToolsItems: MenuItem[] = [
-        { to: '/error-detective', icon: <BugAntIcon className={iconClass}/>, title: 'Error Detective', subtitle: 'Analizar errores y stack traces con IA' },
-    ];
-
     const filteredManagementItems = useMemo(() => 
         managementItems.filter(item => !item.permission || canAccess(item.permission)),
     [canAccess]);
@@ -156,13 +151,6 @@ const MorePage: React.FC = () => {
                          {filteredManagementItems.map(item => <MenuLink key={item.title} {...item} />)}
                     </AccordionSection>
                  )}
-                 <AccordionSection 
-                    title="Herramientas de Diagnóstico" 
-                    isOpen={openSections['Herramientas de Diagnóstico']}
-                    onToggle={() => toggleSection('Herramientas de Diagnóstico')}
-                >
-                    {diagnosticToolsItems.map(item => <MenuLink key={item.title} {...item} />)}
-                </AccordionSection>
             </div>
         </Page>
     );
