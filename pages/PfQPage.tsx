@@ -14,6 +14,8 @@ import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { exportToCsv } from '../lib/utils';
 
 
 // --- Co-located API Logic ---
@@ -180,6 +182,18 @@ const FosTacCalculator: React.FC = () => {
         mutation.mutate(data);
     };
 
+    const handleExport = () => {
+        const dataToExport = history.map(item => ({
+            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+            equipo: item.equipo_nombre,
+            ph: item.ph,
+            fos_mg_l: item.fos_mg_l?.toFixed(2) ?? 'N/A',
+            tac_mg_l: item.tac_mg_l?.toFixed(2) ?? 'N/A',
+            relacion_fos_tac: item.relacion_fos_tac?.toFixed(3) ?? 'N/A',
+        }));
+        exportToCsv('historial_fos_tac.csv', dataToExport);
+    };
+
     if (dataError) {
         return (
             <Card>
@@ -258,7 +272,13 @@ const FosTacCalculator: React.FC = () => {
 
             <Card>
                 <CardContent className="pt-6">
-                   <h2 className="text-lg font-semibold text-text-primary mb-4">Historial de Análisis Recientes</h2>
+                   <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-lg font-semibold text-text-primary">Historial de Análisis Recientes</h2>
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                   </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (
@@ -361,6 +381,16 @@ const Additives: React.FC = () => {
         }
     };
     
+    const handleExport = () => {
+        const dataToExport = history.map(item => ({
+            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+            aditivo: item.tipo_aditivo,
+            cantidad_kg: item.cantidad_kg,
+            equipo: item.equipo_nombre,
+        }));
+        exportToCsv('historial_aditivos.csv', dataToExport);
+    };
+
     const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
@@ -409,7 +439,13 @@ const Additives: React.FC = () => {
 
             <Card>
                 <CardContent className="pt-6">
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Aditivos Recientes</h3>
+                  <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-text-primary">Historial de Aditivos Recientes</h3>
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                  </div>
                   {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                   ) : historyError ? (

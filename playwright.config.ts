@@ -1,11 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests',
+  testDir: './tests', // Scan the entire tests directory
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  retries: 0,
+  workers: undefined,
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:3000',
@@ -25,10 +24,12 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
   ],
+  // Define a custom path for visual regression snapshots
+  snapshotPathTemplate: '{testDir}/snapshots/{testFilePath}-snapshots/{arg}{ext}',
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     timeout: 120 * 1000,
   },
 });

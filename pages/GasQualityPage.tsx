@@ -10,12 +10,13 @@ import { useToast } from '../hooks/use-toast';
 import type { Database } from '../types/database';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
-import { PlusCircleIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
+import { exportToCsv } from '../lib/utils';
 
 // --- Co-located Zod Schema ---
 const gasReadingSchema = z.object({
@@ -105,6 +106,21 @@ const GasQualityPage: React.FC = () => {
     
     const onSubmit = (data: GasReadingFormData) => {
         mutation.mutate(data);
+    };
+
+    const handleExport = () => {
+        const dataToExport = history.map(item => ({
+            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+            equipo: (item as GasReadingHistoryItem).equipos?.nombre_equipo,
+            ch4_porcentaje: item.ch4_porcentaje,
+            co2_porcentaje: item.co2_porcentaje,
+            o2_porcentaje: item.o2_porcentaje,
+            h2s_ppm: item.h2s_ppm,
+            potencia_kw: item.potencia_exacta_kw ?? 'N/A',
+            caudal_scada_kgh: item.caudal_masico_scada_kgh ?? 'N/A',
+            caudal_chp_ls: item.caudal_chp_ls ?? 'N/A',
+        }));
+        exportToCsv('historial_calidad_gas.csv', dataToExport);
     };
 
     const equipmentFormFields: QuickFormField[] = [
@@ -212,7 +228,13 @@ const GasQualityPage: React.FC = () => {
 
             <Card>
                 <CardContent className="pt-6">
-                   <h2 className="text-lg font-semibold text-text-primary mb-4">Historial de Mediciones Recientes</h2>
+                   <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-lg font-semibold text-text-primary">Historial de Mediciones Recientes</h2>
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                   </div>
                    {isHistoryLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (

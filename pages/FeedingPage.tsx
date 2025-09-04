@@ -16,8 +16,60 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
-import { PlusCircleIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
+import { exportToCsv } from '../lib/utils';
+
+
+// --- Co-located Secure Markdown Renderer ---
+/**
+ * A simple and secure renderer for basic markdown returned by the AI.
+ * It handles ordered lists and bold text without using dangerouslySetInnerHTML,
+ * mitigating the risk of XSS attacks.
+ */
+const SimpleMarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
+  // Split into lines and filter out empty lines
+  const lines = text.split('\n').filter(line => line.trim() !== '');
+
+  // A simple function to parse a line for bold text
+  const parseLine = (line: string) => {
+    // This regex splits the line by '**bolded text**' occurrences, keeping the bolded parts
+    const parts = line.split(/(\*\*.*?\*\*)/g).filter(Boolean);
+    return (
+      <>
+        {parts.map((part, partIndex) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={partIndex}>{part.slice(2, -2)}</strong>;
+          }
+          return part;
+        })}
+      </>
+    );
+  };
+  
+  // Check if it looks like a numbered list
+  const isList = lines.every(line => /^\d+\.\s/.test(line.trim()));
+
+  if (isList) {
+    return (
+      <ol>
+        {lines.map((line, index) => (
+          // Remove the markdown list marker before rendering
+          <li key={index}>{parseLine(line.replace(/^\d+\.\s/, ''))}</li>
+        ))}
+      </ol>
+    );
+  }
+
+  // Fallback for non-list content
+  return (
+    <div>
+      {lines.map((line, index) => (
+        <p key={index}>{parseLine(line)}</p>
+      ))}
+    </div>
+  );
+};
 
 
 // --- Co-located Zod Schemas ---
@@ -146,7 +198,9 @@ const AIPrediction: React.FC = () => {
         {result && (
           <div className="mt-6 p-4 bg-background rounded-lg">
             <h3 className="text-md font-semibold text-text-primary mb-2">Recomendación Generada</h3>
-            <div className="prose prose-sm max-w-none text-text-primary" dangerouslySetInnerHTML={{ __html: result.replace(/\n/g, '<br />') }} />
+            <div className="prose prose-sm max-w-none text-text-primary">
+              <SimpleMarkdownRenderer text={result} />
+            </div>
           </div>
         )}
       </CardContent>
@@ -200,6 +254,18 @@ const LogFeeding: React.FC = () => {
     function onSubmit(data: z.infer<typeof logFeedingSchema>) {
         mutation.mutate(data);
     }
+
+    const handleExport = () => {
+        const dataToExport = history.map(item => ({
+            fecha_hora: new Date(item.fecha_hora!).toLocaleString('es-AR'),
+            origen: (item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A',
+            destino: (item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A',
+            cantidad: item.cantidad,
+            unidad: item.unidad,
+            observaciones: item.observaciones,
+        }));
+        exportToCsv('historial_alimentacion.csv', dataToExport);
+    };
 
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
@@ -315,7 +381,13 @@ const LogFeeding: React.FC = () => {
 
             <Card>
                 <CardContent className="pt-6">
-                    <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Alimentación Reciente</h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-text-primary">Historial de Alimentación Reciente</h3>
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                    </div>
                     {isHistoryLoading ? <p className="text-center text-text-secondary">Cargando historial...</p> : (
                          <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-border">

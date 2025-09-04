@@ -16,6 +16,8 @@ import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { exportToCsv } from '../lib/utils';
 
 type ChpChangeRecord = Database['public']['Tables']['cambios_potencia_chp']['Row'];
 
@@ -106,6 +108,17 @@ const ChpControlPage: React.FC = () => {
         mutation.mutate(changeData);
     };
   
+    const handleExport = () => {
+        const dataToExport = history.map(item => ({
+            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+            potencia_inicial_kw: item.potencia_inicial_kw,
+            potencia_programada_kw: item.potencia_programada_kw,
+            motivo: item.motivo_cambio,
+            observaciones: item.observaciones,
+        }));
+        exportToCsv('historial_cambios_chp.csv', dataToExport);
+    };
+
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
@@ -159,7 +172,13 @@ const ChpControlPage: React.FC = () => {
             </Card>
             <Card>
                 <CardContent className="pt-6">
-                    <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Cambios Recientes</h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-text-primary">Historial de Cambios Recientes</h3>
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                    </div>
                     {historyLoading ? (
                         <p className="text-center text-text-secondary">Cargando historial...</p>
                     ) : historyError ? (

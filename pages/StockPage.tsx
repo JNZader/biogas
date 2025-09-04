@@ -10,11 +10,12 @@ import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
 import { useSupabaseData } from '../contexts/SupabaseContext';
-import { PencilIcon, TrashIcon, PlusCircleIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, TrashIcon, PlusCircleIcon, ArchiveBoxIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../components/EmptyState';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
+import { exportToCsv } from '../lib/utils';
 
 type Repuesto = Database['public']['Tables']['repuestos']['Row'];
 type RepuestoInsert = Database['public']['Tables']['repuestos']['Insert'];
@@ -158,6 +159,23 @@ const StockPage: React.FC = () => {
         return 'bg-success-bg text-success';
     };
 
+    const handleExport = () => {
+        const dataToExport = stockItems.map(item => {
+            const proveedor = proveedores.find(p => p.id === item.proveedor_principal_empresa_id);
+            return {
+                nombre_repuesto: item.nombre_repuesto,
+                sku: item.codigo_sku || 'N/A',
+                proveedor: proveedor?.nombre || 'N/A',
+                stock_actual: item.stock_actual,
+                stock_minimo: item.stock_minimo,
+                stock_maximo: item.stock_maximo,
+                ubicacion: item.ubicacion_almacen,
+                estado: getStatus(item) === 'low' ? 'Bajo Stock' : 'OK',
+            };
+        });
+        exportToCsv('inventario_stock.csv', dataToExport);
+    };
+
     if (stockLoading) {
         return <Page><Card><CardContent className="pt-6"><p className="text-center text-text-secondary">Cargando inventario...</p></CardContent></Card></Page>
     }
@@ -173,10 +191,16 @@ const StockPage: React.FC = () => {
             <CardContent className="pt-6">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-lg font-semibold text-text-primary">Inventario de Repuestos</h2>
-                    <Button onClick={() => handleOpenModal('add')} variant="secondary" className="w-auto px-4 py-2 text-sm flex items-center gap-2">
-                        <PlusCircleIcon className="h-5 w-5"/>
-                        Añadir Nuevo Ítem
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button onClick={() => handleOpenModal('add')} variant="secondary" className="w-auto px-4 py-2 text-sm flex items-center gap-2">
+                            <PlusCircleIcon className="h-5 w-5"/>
+                            Añadir Nuevo Ítem
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={stockItems.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                    </div>
                 </div>
                 
                 {stockItems.length === 0 ? (

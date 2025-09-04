@@ -12,6 +12,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 import { useAuth } from '../contexts/AuthContext';
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { exportToCsv } from '../lib/utils';
 
 type EnergiaRecord = Database['public']['Tables']['energia']['Row'];
 
@@ -112,6 +114,19 @@ const EnergyRegistryPage: React.FC = () => {
         mutation.mutate(insertData);
     }
     
+    const handleExport = () => {
+        const dataToExport = history.map(item => ({
+            fecha: new Date(item.fecha + 'T00:00:00').toLocaleDateString('es-AR'),
+            generacion_electrica_total_kwh_dia: item.generacion_electrica_total_kwh_dia,
+            flujo_biogas_kg_dia: item.flujo_biogas_kg_dia,
+            horas_motor_chp: item.horas_funcionamiento_motor_chp_dia,
+            despacho_spot_kwh: item.despacho_spot_smec_kwh_dia,
+            totalizador_smec_kwh: item.totalizador_smec_kwh,
+            totalizador_chp_mwh: item.totalizador_chp_mwh,
+        }));
+        exportToCsv('historial_energia.csv', dataToExport);
+    };
+
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
@@ -229,7 +244,13 @@ const EnergyRegistryPage: React.FC = () => {
             </Card>
             <Card>
                 <CardContent className="pt-6">
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Registros Recientes</h3>
+                  <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-text-primary">Historial de Registros Recientes</h3>
+                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                  </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (

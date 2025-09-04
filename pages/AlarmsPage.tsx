@@ -13,7 +13,7 @@ import { Select } from '../components/ui/Select';
 import EmptyState from '../components/EmptyState';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
-import { cn } from '../lib/utils';
+import { cn, exportToCsv } from '../lib/utils';
 import { useToast } from '../hooks/use-toast';
 import { customAlertsStore } from '../stores/customAlertsStore';
 // FIX: Imported Form components to resolve multiple 'Cannot find name' errors.
@@ -26,7 +26,8 @@ import {
     ArrowUpIcon, 
     ArrowDownIcon, 
     ChevronUpDownIcon, 
-    TrashIcon 
+    TrashIcon,
+    ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 
 // --- Type Definitions ---
@@ -292,6 +293,18 @@ const AlarmsPage: React.FC = () => {
         'info': 'bg-background text-text-secondary',
     }[severity]);
 
+    const handleExport = () => {
+        const dataToExport = processedAlarms.map(alarm => ({
+            fecha_hora: new Date(alarm.timestamp).toLocaleString('es-AR'),
+            tipo_alarma: alarm.alarmType,
+            descripcion: alarm.description,
+            severidad: alarm.severity,
+            estado: alarm.isResolved ? 'Resuelta' : 'Pendiente',
+            origen: alarm.isCustom ? 'Personalizada' : 'Sistema',
+        }));
+        exportToCsv('historial_alarmas.csv', dataToExport);
+    };
+
     if (error) {
         return <Page><Card><CardContent className="pt-6 text-error">Error al Cargar Alarmas: {error.message}</CardContent></Card></Page>;
     }
@@ -301,7 +314,13 @@ const AlarmsPage: React.FC = () => {
             <CustomAlertsConfig />
 
             <Card>
-                <CardHeader><CardTitle>Historial de Alarmas</CardTitle></CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle>Historial de Alarmas</CardTitle>
+                    <Button variant="outline" size="sm" onClick={handleExport} disabled={processedAlarms.length === 0}>
+                        <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                        Exportar
+                    </Button>
+                </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Page from '../components/Page';
 // FIX: Use named import for Card from the new UI component path.
@@ -14,11 +13,12 @@ import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Textarea } from '../components/ui/Textarea';
 import { useSupabaseData } from '../contexts/SupabaseContext';
-import { PlusCircleIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ClipboardDocumentCheckIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../components/EmptyState';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { useToast } from '../hooks/use-toast.ts';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
+import { exportToCsv } from '../lib/utils';
 
 
 type ChecklistItem = Database['public']['Tables']['checklist_items']['Row'];
@@ -356,6 +356,17 @@ const Tasks: React.FC = () => {
         setQuickAddState({ isOpen: true, ...config });
     };
 
+    const handleHistoryExport = () => {
+        const dataToExport = history.map(item => ({
+            fecha_fin: item.fecha_fin ? new Date(item.fecha_fin).toLocaleDateString('es-AR') : 'N/A',
+            equipo: item.equipos?.nombre_equipo,
+            tipo_mantenimiento: item.tipos_mantenimiento?.nombre_tipo,
+            descripcion_problema: item.descripcion_problema,
+            trabajo_realizado: item.descripcion_trabajo_realizado,
+        }));
+        exportToCsv('historial_mantenimiento.csv', dataToExport);
+    };
+
     const commonSelectClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const commonTableClasses = {
@@ -423,7 +434,13 @@ const Tasks: React.FC = () => {
 
             <Card>
                 <CardContent className="pt-6">
-                   <h2 className="text-lg font-semibold text-text-primary mb-4">Historial de Tareas Completadas</h2>
+                   <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-lg font-semibold text-text-primary">Historial de Tareas Completadas</h2>
+                        <Button variant="outline" size="sm" onClick={handleHistoryExport} disabled={history.length === 0}>
+                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                            Exportar
+                        </Button>
+                   </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (

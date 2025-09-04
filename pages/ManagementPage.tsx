@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
@@ -8,7 +10,7 @@ import { Label } from '../components/ui/Label';
 import { Textarea } from '../components/ui/Textarea';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
-import { PencilIcon, TrashIcon, PlusCircleIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, TrashIcon, PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import type { Database } from '../types/database';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,6 +21,7 @@ import { useToast } from '../hooks/use-toast';
 import { Select } from '../components/ui/Select';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { useAuth } from '../contexts/AuthContext';
+import { exportToCsv } from '../lib/utils';
 
 
 // --- Co-located Zod Schemas ---
@@ -152,8 +155,9 @@ const ManagementPage: React.FC = () => {
         if (!deleteConfirmation.item) return;
         
         setDeleteLoading(true);
-        // FIX: Cast item to a simple object with an id to satisfy TypeScript when destructuring from a complex union type.
-        const { id } = deleteConfirmation.item as { id: number };
+        // FIX: Replaced a faulty destructuring assignment with direct property access.
+        // This resolves a TypeScript error where the item's complex union type was inferred as 'never'.
+        const id = (deleteConfirmation.item as any).id;
         const tableName = getTableName(activeTab);
 
         try {
@@ -219,6 +223,48 @@ const ManagementPage: React.FC = () => {
         } finally {
             setFormLoading(false);
         }
+    };
+    
+    const handleExport = () => {
+        let dataToExport: any[] = [];
+        let filename = `${activeTab}.csv`;
+        
+        switch (activeTab) {
+            case 'sustratos':
+                dataToExport = sustratos.map(({ id, created_at, updated_at, activo, planta_id, ...rest }) => rest);
+                break;
+            case 'proveedores':
+                dataToExport = proveedores.map(({ id, created_at, updated_at, activo, direccion_id, id_empresa, iduseradmin, logo_url, tipo_empresa, ...rest }) => rest);
+                break;
+            case 'transportistas':
+                dataToExport = transportistas.map(({ id, created_at, updated_at, activo, direccion_id, id_empresa, iduseradmin, logo_url, tipo_empresa, ...rest }) => rest);
+                break;
+            case 'camiones':
+                dataToExport = camiones.map(c => ({
+                    patente: c.patente,
+                    marca: c.marca,
+                    modelo: c.modelo,
+                    año: c.año,
+                    transportista: transportistas.find(t => t.id === c.transportista_empresa_id)?.nombre || 'N/A',
+                }));
+                break;
+            case 'lugaresDescarga':
+                dataToExport = lugaresDescarga.map(({ id, created_at, updated_at, activo, planta_id, ...rest }) => rest);
+                break;
+            case 'equipos':
+                dataToExport = equipos.map(e => ({
+                    nombre_equipo: e.nombre_equipo,
+                    categoria: e.categoria,
+                    codigo_equipo: e.codigo_equipo,
+                    marca: e.marca,
+                    modelo: e.modelo,
+                }));
+                break;
+            default:
+                return;
+        }
+
+        exportToCsv(filename, dataToExport);
     };
     
     const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
@@ -497,10 +543,16 @@ const ManagementPage: React.FC = () => {
                     <CardContent className="pt-6">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-lg font-semibold text-text-primary">Gestionar {title}</h2>
-                            <Button onClick={() => handleOpenModal('add')} variant="secondary" className="w-auto px-4 py-2 text-sm flex items-center gap-2">
-                                <PlusCircleIcon className="h-5 w-5" />
-                                Añadir Nuevo
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                <Button onClick={() => handleOpenModal('add')} variant="secondary" className="w-auto px-4 py-2 text-sm flex items-center gap-2">
+                                    <PlusCircleIcon className="h-5 w-5" />
+                                    Añadir Nuevo
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={handleExport} disabled={data.length === 0}>
+                                    <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                                    Exportar
+                                </Button>
+                            </div>
                         </div>
 
                         {dataLoading ? <p>Cargando datos...</p> : (

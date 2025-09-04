@@ -46,7 +46,7 @@ const fetchDashboardData = async (timeRange: number) => {
 
 
 // --- Co-located Component ---
-const KpiCard: React.FC<KpiCardProps> = ({ title, value, unit, trend, icon }) => {
+export const KpiCard: React.FC<KpiCardProps> = ({ title, value, unit, trend, icon }) => {
   const isPositive = trend >= 0;
   const trendColor = isPositive ? 'text-success' : 'text-error';
 

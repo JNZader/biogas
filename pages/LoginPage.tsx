@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -9,6 +9,7 @@ import { Input } from '../components/ui/Input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 import { supabase } from '../services/supabaseClient';
 import { useToast } from '../hooks/use-toast';
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 const loginSchema = z.object({
   email: z.string().email('Por favor, introduce un correo electrónico válido.'),
@@ -20,6 +21,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 const LoginPage: React.FC = () => {
     const navigate = useNavigate();
     const { toast } = useToast();
+    const [showPassword, setShowPassword] = useState(false);
 
     const form = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
@@ -78,9 +80,23 @@ const LoginPage: React.FC = () => {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Contraseña</FormLabel>
-                                            <FormControl>
-                                                <Input type="password" {...field} data-testid="password-input"/>
-                                            </FormControl>
+                                            <div className="relative">
+                                                <FormControl>
+                                                    <Input type={showPassword ? 'text' : 'password'} {...field} data-testid="password-input"/>
+                                                </FormControl>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword(!showPassword)}
+                                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-text-secondary"
+                                                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                                >
+                                                    {showPassword ? (
+                                                        <EyeSlashIcon className="h-5 w-5" />
+                                                    ) : (
+                                                        <EyeIcon className="h-5 w-5" />
+                                                    )}
+                                                </button>
+                                            </div>
                                             <FormMessage />
                                         </FormItem>
                                     )}
