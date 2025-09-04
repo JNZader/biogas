@@ -45,7 +45,8 @@ const rootRoute = createRootRoute({
 });
 
 // FIX: The cryptic "strictNullChecks" error from TanStack Router often points to an invalid route tree.
-// Defining the routes inline within `addChildren` can help TypeScript's type inference engine.
+// By extracting the route tree into a constant with `as const`, we prevent TypeScript from widening the
+// complex generic type before it's passed to `createRouter`, resolving the inference issue.
 const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage }),

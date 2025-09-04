@@ -21,7 +21,7 @@ const BottomNav: React.FC = () => {
   const iconClass = "h-6 w-6 mb-1";
   
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-surface border-t border-border shadow-t-lg flex justify-around items-center z-10">
+    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-surface border-t border-border shadow-t-lg flex justify-around items-center z-10 lg:hidden">
       <NavItem to="/" label="Inicio" icon={<HomeIcon className={iconClass} aria-hidden="true" />} />
       <NavItem to="/graphs" label="Gráficos" icon={<ChartBarIcon className={iconClass} aria-hidden="true" />} />
       <NavItem to="/feeding" label="Alimentación" icon={<BeakerIcon className={iconClass} aria-hidden="true" />} />

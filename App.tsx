@@ -18,6 +18,7 @@ import { SupabaseDataProvider } from '@/contexts/SupabaseContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import Spinner from '@/components/ui/Spinner';
+import Sidebar from '@/components/Sidebar';
 
 const pathTitleMap: { [key: string]: string } = {
   '/': 'Dashboard',
@@ -73,16 +74,19 @@ const App: React.FC = () => {
     <AuthProvider>
       <SupabaseDataProvider>
         <ErrorBoundary>
-          <div className="flex flex-col h-screen font-sans text-text-primary bg-background">
-            {showNav && <Header title={pageTitle} />}
-            <main className={cn("flex-grow overflow-y-auto", { "pb-20": showNav })}>
-              <Suspense fallback={<Spinner />}>
-                <Outlet />
-              </Suspense>
-            </main>
-            {showNav && <BottomNav />}
-            <Toaster />
-            <ReactQueryDevtools initialIsOpen={false} />
+          <div className="flex h-screen font-sans text-text-primary bg-background">
+            {showNav && <Sidebar />}
+            <div className={cn("flex-1 flex flex-col w-full", { "lg:ml-64": showNav })}>
+                {showNav && <Header title={pageTitle} />}
+                <main className={cn("flex-grow overflow-y-auto", { "pb-16 lg:pb-0": showNav })}>
+                  <Suspense fallback={<Spinner />}>
+                    <Outlet />
+                  </Suspense>
+                </main>
+                {showNav && <BottomNav />}
+                <Toaster />
+                <ReactQueryDevtools initialIsOpen={false} />
+            </div>
           </div>
         </ErrorBoundary>
       </SupabaseDataProvider>

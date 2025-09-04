@@ -8,31 +8,14 @@ import { Label } from '../components/ui/Label';
 import { Textarea } from '../components/ui/Textarea';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
-import { PencilIcon, TrashIcon, PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import type { Database } from '../types/database';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
-import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal';
 import { useToast } from '../hooks/use-toast';
 import { Select } from '../components/ui/Select';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { useAuth } from '../contexts/AuthContext';
 import { exportToCsv } from '../lib/utils';
-
-
-// --- Co-located Zod Schemas ---
-const camionSchema = z.object({
-  patente: z.string().min(1, "La patente es requerida."),
-  marca: z.string().optional(),
-  modelo: z.string().optional(),
-  año: z.number()
-        .int({ message: "El año debe ser un número entero." })
-        .positive({ message: "El año debe ser un número positivo." })
-        .optional(),
-  transportista_empresa_id: z.string().min(1, "Debe seleccionar un transportista."),
-});
+import { DataTable } from '../components/ui/DataTable';
 
 
 // --- Co-located API Logic ---
@@ -57,7 +40,7 @@ const deleteEntity = async ({ tableName, id }: { tableName: TableName; id: numbe
 };
 
 // --- Feature Components ---
-type Tab = 'sustratos' | 'proveedores' | 'transportistas' | 'camiones' | 'lugaresDescarga' | 'equipos';
+type EntityKey = 'sustratos' | 'proveedores' | 'transportistas' | 'camiones' | 'lugaresDescarga' | 'equipos';
 type Sustrato = Database['public']['Tables']['sustratos']['Row'];
 type Empresa = Database['public']['Tables']['empresa']['Row'];
 type Camion = Database['public']['Tables']['camiones']['Row'];
@@ -65,74 +48,152 @@ type LugarDescarga = Database['public']['Tables']['lugares_descarga']['Row'];
 type Equipo = Database['public']['Tables']['equipos']['Row'];
 type ManagedEntity = Sustrato | Empresa | Camion | LugarDescarga | Equipo;
 
-const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 focus:outline-none whitespace-nowrap ${
-        active
-          ? 'border-b-2 border-primary text-primary bg-blue-50'
-          : 'text-text-secondary hover:text-text-primary'
-      }`}
-    >
-      {children}
-    </button>
-);
+interface FormFieldConfig {
+    name: string;
+    label: string;
+    type: 'text' | 'number' | 'textarea' | 'select';
+    required?: boolean;
+    options?: { value: string; label: string }[];
+}
 
 const ManagementPage: React.FC = () => {
     const { sustratos, proveedores, camiones, lugaresDescarga, equipos, transportistas, loading: dataLoading, error: dataError, refreshData } = useSupabaseData();
     const { activePlanta } = useAuth();
-    const [activeTab, setActiveTab] = useState<Tab>('sustratos');
+    const { toast } = useToast();
+
+    const [selectedEntity, setSelectedEntity] = useState<EntityKey>('sustratos');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentItem, setCurrentItem] = useState<ManagedEntity | null>(null);
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+    
     const [formError, setFormError] = useState('');
     const [formLoading, setFormLoading] = useState(false);
-    const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-    const { toast } = useToast();
     
     const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; item: ManagedEntity | null }>({ isOpen: false, item: null });
     const [deleteLoading, setDeleteLoading] = useState(false);
     
-    const form = useForm<z.infer<typeof camionSchema>>({
-        resolver: zodResolver(camionSchema),
-        defaultValues: {
-            patente: '',
-            marca: '',
-            modelo: '',
-            transportista_empresa_id: '',
-        }
-    });
 
-    const getTableName = (tab: Tab): TableName => {
-        if (tab === 'proveedores' || tab === 'transportistas') return 'empresa';
-        if (tab === 'lugaresDescarga') return 'lugares_descarga';
-        return tab;
+    const getTableName = (entity: EntityKey): TableName => {
+        if (entity === 'proveedores' || entity === 'transportistas') return 'empresa';
+        if (entity === 'lugaresDescarga') return 'lugares_descarga';
+        return entity;
     };
+
+    const managementConfig = useMemo(() => {
+        const baseConfig = {
+            title: '',
+            data: [] as any[],
+            tableName: 'sustratos' as TableName,
+            filterColumn: 'nombre' as any,
+            columns: [] as any[],
+            formFields: [] as FormFieldConfig[],
+        };
+
+        switch (selectedEntity) {
+            case 'sustratos':
+                baseConfig.title = 'Sustratos';
+                baseConfig.data = sustratos;
+                baseConfig.tableName = 'sustratos';
+                baseConfig.filterColumn = 'nombre';
+                baseConfig.columns = [
+                    { header: 'Nombre', accessorKey: 'nombre' },
+                    { header: 'Categoría', accessorKey: 'categoria' },
+                ];
+                baseConfig.formFields = [
+                    { name: 'nombre', label: 'Nombre', type: 'text', required: true },
+                    { name: 'categoria', label: 'Categoría', type: 'text' },
+                    { name: 'descripcion', label: 'Descripción', type: 'textarea' },
+                ];
+                break;
+            case 'proveedores':
+                baseConfig.title = 'Proveedores';
+                baseConfig.data = proveedores;
+                baseConfig.tableName = 'empresa';
+                baseConfig.filterColumn = 'nombre';
+                baseConfig.columns = [
+                    { header: 'Nombre', accessorKey: 'nombre' },
+                    { header: 'CUIT', accessorKey: 'cuit' },
+                ];
+                baseConfig.formFields = [
+                    { name: 'nombre', label: 'Nombre', type: 'text', required: true },
+                    { name: 'razon_social', label: 'Razón Social', type: 'text' },
+                    { name: 'cuit', label: 'CUIT', type: 'text' },
+                ];
+                break;
+             case 'transportistas':
+                baseConfig.title = 'Transportistas';
+                baseConfig.data = transportistas;
+                baseConfig.tableName = 'empresa';
+                baseConfig.filterColumn = 'nombre';
+                baseConfig.columns = [
+                    { header: 'Nombre', accessorKey: 'nombre' },
+                    { header: 'CUIT', accessorKey: 'cuit' },
+                ];
+                baseConfig.formFields = [
+                    { name: 'nombre', label: 'Nombre', type: 'text', required: true },
+                    { name: 'cuit', label: 'CUIT', type: 'text' },
+                ];
+                break;
+            case 'camiones':
+                baseConfig.title = 'Camiones';
+                baseConfig.data = camiones;
+                baseConfig.tableName = 'camiones';
+                baseConfig.filterColumn = 'patente';
+                baseConfig.columns = [
+                    { header: 'Patente', accessorKey: 'patente' },
+                    { header: 'Marca', accessorKey: 'marca' },
+                    { header: 'Transportista', accessorKey: 'transportista_empresa_id', cell: (item: Camion) => transportistas.find(t => t.id === item.transportista_empresa_id)?.nombre || 'N/A' },
+                ];
+                baseConfig.formFields = [
+                    { name: 'patente', label: 'Patente', type: 'text', required: true },
+                    { name: 'transportista_empresa_id', label: 'Transportista', type: 'select', required: true, options: transportistas.map(t => ({ value: String(t.id), label: t.nombre })) },
+                    { name: 'marca', label: 'Marca', type: 'text' },
+                    { name: 'modelo', label: 'Modelo', type: 'text' },
+                    { name: 'año', label: 'Año', type: 'number' },
+                ];
+                break;
+            case 'lugaresDescarga':
+                 baseConfig.title = 'Lugares de Descarga';
+                 baseConfig.data = lugaresDescarga;
+                 baseConfig.tableName = 'lugares_descarga';
+                 baseConfig.filterColumn = 'nombre';
+                 baseConfig.columns = [
+                     { header: 'Nombre', accessorKey: 'nombre' },
+                     { header: 'Tipo', accessorKey: 'tipo' },
+                 ];
+                 baseConfig.formFields = [
+                     { name: 'nombre', label: 'Nombre', type: 'text', required: true },
+                     { name: 'tipo', label: 'Tipo', type: 'text' },
+                     { name: 'capacidad_m3', label: 'Capacidad (m³)', type: 'number' },
+                 ];
+                 break;
+            case 'equipos':
+                baseConfig.title = 'Equipos';
+                baseConfig.data = equipos;
+                baseConfig.tableName = 'equipos';
+                baseConfig.filterColumn = 'nombre_equipo';
+                baseConfig.columns = [
+                    { header: 'Nombre', accessorKey: 'nombre_equipo' },
+                    { header: 'Categoría', accessorKey: 'categoria' },
+                    { header: 'Código', accessorKey: 'codigo_equipo' },
+                ];
+                baseConfig.formFields = [
+                    { name: 'nombre_equipo', label: 'Nombre', type: 'text', required: true },
+                    { name: 'categoria', label: 'Categoría', type: 'text' },
+                    { name: 'codigo_equipo', label: 'Código / Tag', type: 'text' },
+                    { name: 'marca', label: 'Marca', type: 'text' },
+                    { name: 'modelo', label: 'Modelo', type: 'text' },
+                ];
+                break;
+        }
+        return baseConfig;
+    }, [selectedEntity, sustratos, proveedores, camiones, lugaresDescarga, equipos, transportistas]);
+
 
     const handleOpenModal = (mode: 'add' | 'edit', item: ManagedEntity | null = null) => {
         setModalMode(mode);
         setCurrentItem(item);
         setFormError('');
-
-        if (activeTab === 'camiones') {
-             if (mode === 'edit' && item && 'patente' in item) {
-                form.reset({
-                    patente: item.patente || '',
-                    marca: item.marca || '',
-                    modelo: item.modelo || '',
-                    año: item.año || undefined,
-                    transportista_empresa_id: String(item.transportista_empresa_id || ''),
-                });
-            } else {
-                form.reset({
-                    patente: '',
-                    marca: '',
-                    modelo: '',
-                    año: undefined,
-                    transportista_empresa_id: '',
-                });
-            }
-        }
         setIsModalOpen(true);
     };
 
@@ -154,65 +215,54 @@ const ManagementPage: React.FC = () => {
         
         setDeleteLoading(true);
         const id = (deleteConfirmation.item as { id: number }).id;
-        const tableName = getTableName(activeTab);
+        const tableName = getTableName(selectedEntity);
 
         try {
             await deleteEntity({ tableName, id });
             await refreshData();
             closeDeleteConfirmation();
+            toast({ title: 'Éxito', description: `${managementConfig.title.slice(0, -1)} eliminado.` });
         } catch (error: any) {
-            alert(`Error al eliminar: ${error.message}`);
+            toast({ title: 'Error al eliminar', description: error.message, variant: 'destructive' });
         } finally {
             setDeleteLoading(false);
         }
     };
     
-    const onManualSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setFormLoading(true);
         setFormError('');
 
         const formData = new FormData(e.currentTarget);
-        const data = Object.fromEntries(formData.entries());
+        // FIX: Explicitly type `data` to allow assigning numeric values, resolving the 'FormDataEntryValue' type error.
+        const data: { [key: string]: any } = Object.fromEntries(formData.entries());
 
-        const tableName = getTableName(activeTab);
+        // Process data types
+        managementConfig.formFields.forEach(field => {
+            if (field.type === 'number' && data[field.name]) {
+                data[field.name] = Number(data[field.name]);
+            }
+             if (field.type === 'select' && data[field.name] && field.name.endsWith('_id')) {
+                data[field.name] = Number(data[field.name]);
+            }
+        });
         
-        if(activeTab === 'proveedores'){ data.tipo_empresa = 'proveedor'; }
-        if(activeTab === 'transportistas'){ data.tipo_empresa = 'transportista'; }
-        if(activeTab === 'equipos' && activePlanta) { (data as any).planta_id = activePlanta.id; }
+        // Add extra required data
+        if(selectedEntity === 'proveedores'){ data.tipo_empresa = 'proveedor'; }
+        if(selectedEntity === 'transportistas'){ data.tipo_empresa = 'transportista'; }
+        if(selectedEntity === 'equipos' && activePlanta) { (data as any).planta_id = activePlanta.id; }
         
         try {
             if (modalMode === 'add') {
-                await createEntity({ tableName, data });
+                await createEntity({ tableName: managementConfig.tableName, data });
             } else if (currentItem) {
-                await updateEntity({ tableName, data, id: (currentItem as { id: number }).id });
+                await updateEntity({ tableName: managementConfig.tableName, data, id: (currentItem as { id: number }).id });
             }
             
             await refreshData();
             handleCloseModal();
-        } catch (err: any) {
-            setFormError(err.message);
-        } finally {
-            setFormLoading(false);
-        }
-    };
-
-    const onCamionSubmit = async (values: z.infer<typeof camionSchema>) => {
-        setFormLoading(true);
-        setFormError('');
-        const tableName = 'camiones';
-        
-        const data = { ...values, transportista_empresa_id: Number(values.transportista_empresa_id) };
-        
-        try {
-            if (modalMode === 'add') {
-                await createEntity({ tableName, data });
-            } else if (currentItem) {
-                await updateEntity({ tableName, data, id: (currentItem as { id: number }).id });
-            }
-            
-            await refreshData();
-            handleCloseModal();
+            toast({ title: 'Éxito', description: `${managementConfig.title.slice(0, -1)} guardado.` });
         } catch (err: any) {
             setFormError(err.message);
         } finally {
@@ -221,48 +271,26 @@ const ManagementPage: React.FC = () => {
     };
     
     const handleExport = () => {
-        let dataToExport: any[] = [];
-        let filename = `${activeTab}.csv`;
+        let dataToExport: any[] = managementConfig.data;
+        let filename = `${selectedEntity}.csv`;
         
-        switch (activeTab) {
-            case 'sustratos':
-                dataToExport = sustratos.map(({ id, created_at, updated_at, activo, planta_id, ...rest }) => rest);
-                break;
-            case 'proveedores':
-                dataToExport = proveedores.map(({ id, created_at, updated_at, activo, direccion_id, id_empresa, iduseradmin, logo_url, tipo_empresa, ...rest }) => rest);
-                break;
-            case 'transportistas':
-                dataToExport = transportistas.map(({ id, created_at, updated_at, activo, direccion_id, id_empresa, iduseradmin, logo_url, tipo_empresa, ...rest }) => rest);
-                break;
-            case 'camiones':
-                dataToExport = camiones.map(c => ({
-                    patente: c.patente,
-                    marca: c.marca,
-                    modelo: c.modelo,
-                    año: c.año,
-                    transportista: transportistas.find(t => t.id === c.transportista_empresa_id)?.nombre || 'N/A',
-                }));
-                break;
-            case 'lugaresDescarga':
-                dataToExport = lugaresDescarga.map(({ id, created_at, updated_at, activo, planta_id, ...rest }) => rest);
-                break;
-            case 'equipos':
-                dataToExport = equipos.map(e => ({
-                    nombre_equipo: e.nombre_equipo,
-                    categoria: e.categoria,
-                    codigo_equipo: e.codigo_equipo,
-                    marca: e.marca,
-                    modelo: e.modelo,
-                }));
-                break;
-            default:
-                return;
+        // Custom transformations for export if needed
+        if (selectedEntity === 'camiones') {
+            dataToExport = camiones.map(c => ({
+                patente: c.patente,
+                marca: c.marca,
+                modelo: c.modelo,
+                año: c.año,
+                transportista: transportistas.find(t => t.id === c.transportista_empresa_id)?.nombre || 'N/A',
+            }));
+        } else {
+             dataToExport = managementConfig.data.map(item => {
+                const { id, created_at, updated_at, activo, planta_id, ...rest } = item as any;
+                return rest;
+            });
         }
-
         exportToCsv(filename, dataToExport);
     };
-    
-    const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
 
     const getItemName = (item: ManagedEntity | null): string => {
         if (!item) return '';
@@ -271,279 +299,49 @@ const ManagementPage: React.FC = () => {
         if ('nombre_equipo' in item && item.nombre_equipo) return item.nombre_equipo;
         return `ítem con ID ${(item as { id: number }).id}`;
     };
-
-    const renderTable = () => {
-        const commonClasses = "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider";
-        switch (activeTab) {
-            case 'sustratos':
-                return (
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-background"><tr><th className={commonClasses}>Nombre</th><th className={commonClasses}>Categoría</th><th className={commonClasses}></th></tr></thead>
-                        <tbody className="bg-surface divide-y divide-border">
-                            {sustratos.map((item: Sustrato) => (
-                                <tr key={item.id}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-primary">{item.nombre}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{item.categoria}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                        <button onClick={() => handleOpenModal('edit', item)} className="p-1 text-primary hover:text-blue-800"><PencilIcon className="h-5 w-5"/></button>
-                                        <button onClick={() => openDeleteConfirmation(item)} className="p-1 text-red-600 hover:text-red-800"><TrashIcon className="h-5 w-5"/></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
-            case 'proveedores':
-                 return (
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-background"><tr><th className={commonClasses}>Nombre</th><th className={commonClasses}>CUIT</th><th className={commonClasses}></th></tr></thead>
-                        <tbody className="bg-surface divide-y divide-border">
-                            {proveedores.map((item: Empresa) => (
-                                <tr key={item.id}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-primary">{item.nombre}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{item.cuit}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                        <button onClick={() => handleOpenModal('edit', item)} className="p-1 text-primary hover:text-blue-800"><PencilIcon className="h-5 w-5"/></button>
-                                        <button onClick={() => openDeleteConfirmation(item)} className="p-1 text-red-600 hover:text-red-800"><TrashIcon className="h-5 w-5"/></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
-            case 'transportistas':
-                 return (
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-background"><tr><th className={commonClasses}>Nombre</th><th className={commonClasses}>CUIT</th><th className={commonClasses}></th></tr></thead>
-                        <tbody className="bg-surface divide-y divide-border">
-                            {transportistas.map((item: Empresa) => (
-                                <tr key={item.id}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-primary">{item.nombre}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{item.cuit}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                        <button onClick={() => handleOpenModal('edit', item)} className="p-1 text-primary hover:text-blue-800"><PencilIcon className="h-5 w-5"/></button>
-                                        <button onClick={() => openDeleteConfirmation(item)} className="p-1 text-red-600 hover:text-red-800"><TrashIcon className="h-5 w-5"/></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
-             case 'camiones':
-                return (
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-background"><tr><th className={commonClasses}>Patente</th><th className={commonClasses}>Marca</th><th className={commonClasses}>Transportista</th><th className={commonClasses}></th></tr></thead>
-                        <tbody className="bg-surface divide-y divide-border">
-                            {camiones.map((item: Camion) => {
-                                const transportista = transportistas.find(t => t.id === item.transportista_empresa_id);
-                                return (
-                                <tr key={item.id}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-primary">{item.patente}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{item.marca}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{transportista?.nombre || 'N/A'}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                        <button onClick={() => handleOpenModal('edit', item)} className="p-1 text-primary hover:text-blue-800"><PencilIcon className="h-5 w-5"/></button>
-                                        <button onClick={() => openDeleteConfirmation(item)} className="p-1 text-red-600 hover:text-red-800"><TrashIcon className="h-5 w-5"/></button>
-                                    </td>
-                                </tr>
-                                )
-                            })}
-                        </tbody>
-                    </table>
-                );
-            case 'lugaresDescarga':
-                return (
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-background"><tr><th className={commonClasses}>Nombre</th><th className={commonClasses}>Tipo</th><th className={commonClasses}></th></tr></thead>
-                        <tbody className="bg-surface divide-y divide-border">
-                            {lugaresDescarga.map((item: LugarDescarga) => (
-                                <tr key={item.id}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-primary">{item.nombre}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{item.tipo}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                        <button onClick={() => handleOpenModal('edit', item)} className="p-1 text-primary hover:text-blue-800"><PencilIcon className="h-5 w-5"/></button>
-                                        <button onClick={() => openDeleteConfirmation(item)} className="p-1 text-red-600 hover:text-red-800"><TrashIcon className="h-5 w-5"/></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
-            case 'equipos':
-                return (
-                    <table className="min-w-full divide-y divide-border">
-                        <thead className="bg-background"><tr><th className={commonClasses}>Nombre</th><th className={commonClasses}>Categoría</th><th className={commonClasses}>Código</th><th className={commonClasses}></th></tr></thead>
-                        <tbody className="bg-surface divide-y divide-border">
-                            {equipos.map((item: Equipo) => (
-                                <tr key={item.id}>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-primary">{item.nombre_equipo}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{item.categoria}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">{item.codigo_equipo}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm space-x-2">
-                                        <button onClick={() => handleOpenModal('edit', item)} className="p-1 text-primary hover:text-blue-800"><PencilIcon className="h-5 w-5"/></button>
-                                        <button onClick={() => openDeleteConfirmation(item)} className="p-1 text-red-600 hover:text-red-800"><TrashIcon className="h-5 w-5"/></button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                );
-            default: return null;
-        }
-    };
     
-    const renderModalForm = () => {
-        switch (activeTab) {
-            case 'sustratos':
-                return (
-                    <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem && 'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={currentItem && 'categoria' in currentItem ? currentItem.categoria ?? '' : ''} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="descripcion">Descripción</Label><Textarea id="descripcion" name="descripcion" defaultValue={currentItem && 'descripcion' in currentItem ? currentItem.descripcion ?? '' : ''} className={commonInputClasses} /></div>
-                    </>
-                );
-            case 'proveedores':
-            case 'transportistas':
-                return (
-                     <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem && 'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="razon_social">Razón Social</Label><Input id="razon_social" name="razon_social" type="text" defaultValue={currentItem && 'razon_social' in currentItem ? currentItem.razon_social ?? '' : ''} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="cuit">CUIT</Label><Input id="cuit" name="cuit" type="text" defaultValue={currentItem && 'cuit' in currentItem ? currentItem.cuit ?? '' : ''} className={commonInputClasses}/></div>
-                    </>
-                );
-            case 'camiones':
-                return (
-                    <Form {...form}>
-                        <div className="space-y-4">
-                            <FormField
-                                control={form.control}
-                                name="patente"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Patente</FormLabel>
-                                        <FormControl><Input {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="transportista_empresa_id"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <div className="flex items-center justify-between">
-                                            <FormLabel>Transportista</FormLabel>
-                                            <button type="button" onClick={() => setIsQuickAddOpen(true)} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
-                                        </div>
-                                        <FormControl>
-                                            <Select {...field} disabled={dataLoading}>
-                                                <option value="">{dataLoading ? 'Cargando...' : 'Seleccione transportista'}</option>
-                                                {transportistas.map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
-                                            </Select>
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="marca"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Marca</FormLabel>
-                                        <FormControl><Input {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="modelo"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Modelo</FormLabel>
-                                        <FormControl><Input {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="año"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Año</FormLabel>
-                                        <FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-                    </Form>
-                );
-             case 'lugaresDescarga':
-                return (
-                     <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem && 'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="tipo">Tipo</Label><Input id="tipo" name="tipo" type="text" defaultValue={currentItem && 'tipo' in currentItem ? currentItem.tipo ?? '' : ''} placeholder="Ej: Playa, Tolva, Tanque" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="capacidad_m3">Capacidad (m³)</Label><Input id="capacidad_m3" name="capacidad_m3" type="number" min="0" defaultValue={currentItem && 'capacidad_m3' in currentItem ? currentItem.capacidad_m3 ?? '' : ''} className={commonInputClasses}/></div>
-                    </>
-                );
-            case 'equipos':
-                return (
-                    <>
-                        <div><Label htmlFor="nombre_equipo">Nombre del Equipo</Label><Input id="nombre_equipo" name="nombre_equipo" type="text" defaultValue={currentItem && 'nombre_equipo' in currentItem ? currentItem.nombre_equipo : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={currentItem && 'categoria' in currentItem ? currentItem.categoria ?? '' : ''} placeholder="Ej: Bomba, Agitador" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="codigo_equipo">Código / Tag</Label><Input id="codigo_equipo" name="codigo_equipo" type="text" defaultValue={currentItem && 'codigo_equipo' in currentItem ? currentItem.codigo_equipo ?? '' : ''} placeholder="Ej: P-001" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="marca">Marca</Label><Input id="marca" name="marca" type="text" defaultValue={currentItem && 'marca' in currentItem ? currentItem.marca ?? '' : ''} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="modelo">Modelo</Label><Input id="modelo" name="modelo" type="text" defaultValue={currentItem && 'modelo' in currentItem ? currentItem.modelo ?? '' : ''} className={commonInputClasses}/></div>
-                    </>
-                );
-            default: return null;
-        }
-    };
-
-    const { title, data } = useMemo(() => {
-        switch (activeTab) {
-            case 'sustratos': return { title: 'Sustratos', data: sustratos };
-            case 'proveedores': return { title: 'Proveedores', data: proveedores };
-            case 'transportistas': return { title: 'Transportistas', data: transportistas };
-            case 'camiones': return { title: 'Camiones', data: camiones };
-            case 'lugaresDescarga': return { title: 'Lugares de Descarga', data: lugaresDescarga };
-            case 'equipos': return { title: 'Equipos', data: equipos };
-        }
-    }, [activeTab, sustratos, proveedores, camiones, lugaresDescarga, equipos, transportistas]);
-
-    const formSubmitHandler = activeTab === 'camiones' ? form.handleSubmit(onCamionSubmit) : onManualSubmit;
-
+    const renderModalFormFields = () => (
+        managementConfig.formFields.map(field => (
+            <div key={field.name}>
+                <Label htmlFor={field.name}>{field.label}</Label>
+                {field.type === 'textarea' ? (
+                    <Textarea id={field.name} name={field.name} required={field.required} className="mt-1" defaultValue={currentItem?.[field.name as keyof ManagedEntity] as string ?? ''}/>
+                ) : field.type === 'select' ? (
+                    <Select id={field.name} name={field.name} required={field.required} className="mt-1" defaultValue={currentItem?.[field.name as keyof ManagedEntity] as string ?? ''}>
+                        <option value="">Seleccione una opción</option>
+                        {field.options?.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </Select>
+                ) : (
+                    <Input id={field.name} name={field.name} type={field.type} required={field.required} className="mt-1" min={field.type === 'number' ? '0' : undefined} defaultValue={currentItem?.[field.name as keyof ManagedEntity] as any ?? ''} />
+                )}
+            </div>
+        ))
+    );
+    
     return (
         <ProtectedRoute requiredPermission="administracion">
             <Page>
-                <div className="mb-4 border-b border-gray-200">
-                    <div className="overflow-x-auto">
-                        <nav className="-mb-px flex space-x-4" aria-label="Tabs">
-                            <TabButton active={activeTab === 'sustratos'} onClick={() => setActiveTab('sustratos')}>Sustratos</TabButton>
-                            <TabButton active={activeTab === 'proveedores'} onClick={() => setActiveTab('proveedores')}>Proveedores</TabButton>
-                            <TabButton active={activeTab === 'transportistas'} onClick={() => setActiveTab('transportistas')}>Transportistas</TabButton>
-                            <TabButton active={activeTab === 'camiones'} onClick={() => setActiveTab('camiones')}>Camiones</TabButton>
-                            <TabButton active={activeTab === 'lugaresDescarga'} onClick={() => setActiveTab('lugaresDescarga')}>Lugares Descarga</TabButton>
-                            <TabButton active={activeTab === 'equipos'} onClick={() => setActiveTab('equipos')}>Equipos</TabButton>
-                        </nav>
-                    </div>
-                </div>
-
-                {dataError && <Card><CardContent className="pt-6"><p className="text-red-500">{dataError}</p></CardContent></Card>}
-
+                 {dataError && <Card><CardContent className="pt-6"><p className="text-red-500">{dataError}</p></CardContent></Card>}
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-semibold text-text-primary">Gestionar {title}</h2>
-                            <div className="flex items-center gap-2">
-                                <Button onClick={() => handleOpenModal('add')} variant="secondary" className="w-auto px-4 py-2 text-sm flex items-center gap-2">
-                                    <PlusCircleIcon className="h-5 w-5" />
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                             <div className="flex-1 w-full sm:max-w-xs">
+                                <Label htmlFor="entity-select">Seleccionar Entidad a Gestionar</Label>
+                                <Select id="entity-select" value={selectedEntity} onChange={e => setSelectedEntity(e.target.value as EntityKey)}>
+                                    <option value="sustratos">Sustratos</option>
+                                    <option value="proveedores">Proveedores</option>
+                                    <option value="transportistas">Transportistas</option>
+                                    <option value="camiones">Camiones</option>
+                                    <option value="lugaresDescarga">Lugares Descarga</option>
+                                    <option value="equipos">Equipos</option>
+                                </Select>
+                            </div>
+                            <div className="flex items-center gap-2 self-end sm:self-center">
+                                <Button onClick={() => handleOpenModal('add')} variant="secondary" size="sm">
+                                    <PlusCircleIcon className="h-5 w-5 mr-2" />
                                     Añadir Nuevo
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={handleExport} disabled={data.length === 0}>
+                                <Button variant="outline" size="sm" onClick={handleExport} disabled={managementConfig.data.length === 0}>
                                     <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                                     Exportar
                                 </Button>
@@ -551,9 +349,13 @@ const ManagementPage: React.FC = () => {
                         </div>
 
                         {dataLoading ? <p>Cargando datos...</p> : (
-                            <div className="overflow-x-auto">
-                                {data.length > 0 ? renderTable() : <p className="text-center text-text-secondary py-4">No hay {title.toLowerCase()} para mostrar.</p>}
-                            </div>
+                             <DataTable
+                                columns={managementConfig.columns}
+                                data={managementConfig.data}
+                                filterColumn={managementConfig.filterColumn}
+                                onEdit={(item) => handleOpenModal('edit', item)}
+                                onDelete={openDeleteConfirmation}
+                            />
                         )}
                     </CardContent>
                 </Card>
@@ -561,17 +363,17 @@ const ManagementPage: React.FC = () => {
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>{`${modalMode === 'add' ? 'Añadir' : 'Editar'} ${title.slice(0, -1)}`}</DialogTitle>
+                            <DialogTitle>{`${modalMode === 'add' ? 'Añadir' : 'Editar'} ${managementConfig.title.slice(0, -1)}`}</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={formSubmitHandler} className="space-y-4 px-6 pb-6">
-                            {renderModalForm()}
+                        <form onSubmit={handleFormSubmit} className="space-y-4 px-6 pb-6">
+                            {renderModalFormFields()}
                             {formError && <p className="text-red-500 text-sm">{formError}</p>}
-                            <div className="flex justify-end space-x-3 pt-4">
-                                <Button type="button" variant="secondary" onClick={handleCloseModal} className="w-auto bg-gray-200 text-gray-700 hover:bg-gray-300">Cancelar</Button>
-                                <Button type="submit" variant="default" className="w-auto" isLoading={formLoading}>
+                            <DialogFooter className="pt-4">
+                                <Button type="button" variant="outline" onClick={handleCloseModal}>Cancelar</Button>
+                                <Button type="submit" variant="default" isLoading={formLoading}>
                                     {modalMode === 'add' ? 'Guardar' : 'Actualizar'}
                                 </Button>
-                            </div>
+                            </DialogFooter>
                         </form>
                     </DialogContent>
                 </Dialog>
@@ -592,22 +394,6 @@ const ManagementPage: React.FC = () => {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
-
-                <QuickAddModal
-                    isOpen={isQuickAddOpen}
-                    onClose={() => setIsQuickAddOpen(false)}
-                    entityName="Transportista"
-                    tableName="empresa"
-                    formFields={[
-                        { name: 'nombre', label: 'Nombre del Transportista', type: 'text', required: true },
-                        { name: 'cuit', label: 'CUIT', type: 'text' }
-                    ]}
-                    extraData={{ tipo_empresa: 'transportista' }}
-                    onSuccess={() => {
-                        toast({ title: 'Éxito', description: 'Transportista añadido con éxito.' });
-                        refreshData();
-                    }}
-                />
             </Page>
         </ProtectedRoute>
     );
