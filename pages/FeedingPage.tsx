@@ -73,8 +73,6 @@ const SimpleMarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
 
 
 // --- Co-located Zod Schemas ---
-// FIX: Replaced z.coerce.number with z.number since coercion is handled in the component's onChange event, resolving type inference issues with react-hook-form.
-// FIX: Replaced z.number().min(0) with z.number().nonnegative() for improved schema clarity and to prevent negative values.
 const analysisSchema = z.object({
   lipids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
   proteins: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
@@ -83,7 +81,6 @@ const analysisSchema = z.object({
   volatileSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
 });
 
-// FIX: Replaced z.coerce.number with z.number since coercion is handled in the component's onChange event, resolving type inference issues.
 const logFeedingSchema = z.object({
     source: z.string().min(1, "Debe seleccionar un origen."),
     destination: z.string().min(1, "Debe seleccionar un destino."),
@@ -183,7 +180,6 @@ const AIPrediction: React.FC = () => {
                   <FormItem>
                     <FormLabel className="capitalize">{key.replace(/([A-Z])/g, ' $1')} (%)</FormLabel>
                     <FormControl>
-                      {/* FIX: Added an onChange handler to explicitly convert the input value to a number, ensuring type consistency with the Zod schema. */}
                       <Input type="number" step="0.1" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
                     </FormControl>
                     <FormMessage />
@@ -336,7 +332,6 @@ const LogFeeding: React.FC = () => {
                                     render={({ field }) => (
                                         <FormItem className="w-2/3 flex-grow space-y-0">
                                             <FormControl>
-                                                {/* FIX: Added an onChange handler to explicitly convert the input value to a number for type consistency. */}
                                                 <Input type="number" step="any" {...field} value={field.value ?? ''} className="rounded-r-none" placeholder="e.g., 5000" onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
                                             </FormControl>
                                             <FormMessage className="mt-2" />

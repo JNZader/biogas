@@ -3,6 +3,7 @@ import { UserCircleIcon, ChevronDownIcon, BuildingOffice2Icon } from '@heroicons
 // FIX: Updated package name from '@tanstack/router' to '@tanstack/react-router'.
 import { Link } from '@tanstack/react-router';
 import { useAuth } from '../contexts/AuthContext';
+import { PlantaId } from '../types/branded';
 
 interface HeaderProps {
   title: string;
@@ -24,7 +25,8 @@ const Header: React.FC<HeaderProps> = ({ title }) => {
     }, []);
 
     const handleSwitchPlanta = (plantaId: number) => {
-        switchPlanta(plantaId);
+        // FIX: Cast the 'plantaId' from a generic number to the branded type 'PlantaId' to satisfy the 'switchPlanta' function's signature and ensure type safety.
+        switchPlanta(plantaId as PlantaId);
         setIsDropdownOpen(false);
     };
 

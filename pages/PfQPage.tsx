@@ -5,13 +5,12 @@ import { Button } from '../components/ui/Button';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
 import { Input } from '../components/ui/Input';
-import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
 import type { Database } from '../types/database';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
@@ -34,17 +33,27 @@ const createFosTac = async (formData: FosTacFormData) => {
     return { success: true };
 };
 
-const createAditivo = async (formData: any) => {
+const createAditivo = async (formData: AdditiveFormData) => {
     const { error } = await supabase.from('aditivos_biodigestor').insert({
         planta_id: 1, // Hardcoded plant ID for demo
         fecha_hora: `${formData.additive_date}T${new Date().toTimeString().slice(0,8)}`,
-        tipo_aditivo: formData.additive.toString(),
-        cantidad_kg: Number(formData.additive_quantity),
+        tipo_aditivo: formData.additive,
+        cantidad_kg: formData.additive_quantity,
         equipo_id: Number(formData.additive_bio),
         usuario_operador_id: 1, // hardcoded
     });
     if(error) throw error;
     return { success: true };
+};
+
+const fetchAditivosHistory = async () => {
+    const { data, error } = await supabase
+        .from('aditivos_biodigestor')
+        .select(`*, equipos ( nombre_equipo )`)
+        .order('fecha_hora', { ascending: false })
+        .limit(15);
+    if (error) throw error;
+    return data;
 };
 
 
@@ -56,7 +65,7 @@ interface FosTacHistoryItem extends FosTacAnalysis {
 
 type AditivoRecord = Database['public']['Tables']['aditivos_biodigestor']['Row'];
 interface EnrichedAditivoRecord extends AditivoRecord {
-    equipo_nombre?: string;
+    equipos?: { nombre_equipo: string } | null;
 }
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
@@ -72,7 +81,7 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
     </button>
 );
 
-// --- Zod Schema for FOS/TAC form ---
+// --- Zod Schemas ---
 const fosTacSchema = z.object({
   equipment: z.string().min(1, "Debe seleccionar un equipo."),
   date: z.string().min(1, "La fecha es requerida."),
@@ -84,6 +93,14 @@ const fosTacSchema = z.object({
   path: ['vol2'],
 });
 type FosTacFormData = z.infer<typeof fosTacSchema>;
+
+const additiveSchema = z.object({
+    additive_date: z.string().min(1, "La fecha es requerida."),
+    additive: z.enum(['BICKO', 'HIMAX', 'CAL', 'OTROS']),
+    additive_quantity: z.number().positive("La cantidad debe ser un número positivo."),
+    additive_bio: z.string().min(1, "Debe seleccionar un biodigestor."),
+});
+type AdditiveFormData = z.infer<typeof additiveSchema>;
 
 
 const FosTacCalculator: React.FC = () => {
@@ -319,79 +336,54 @@ const FosTacCalculator: React.FC = () => {
 
 const Additives: React.FC = () => {
     const { equipos, loading: dataLoading, error: dataError } = useSupabaseData();
-    const [isLoading, setIsLoading] = useState(false);
-    const [message, setMessage] = useState('');
-    const [history, setHistory] = useState<EnrichedAditivoRecord[]>([]);
-    const [historyLoading, setHistoryLoading] = useState(true);
-    const [historyError, setHistoryError] = useState<string | null>(null);
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+
+    const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({
+        queryKey: ['additivesHistory'],
+        queryFn: fetchAditivosHistory,
+    });
 
     const biodigestores = useMemo(() => 
         equipos.filter(e => e.nombre_equipo?.toLowerCase().includes('biodigestor')), 
     [equipos]);
-
-    const fetchHistory = useCallback(async () => {
-        if (!equipos || equipos.length === 0) return;
-        setHistoryLoading(true);
-        setHistoryError(null);
-        try {
-            const { data, error } = await supabase
-                .from('aditivos_biodigestor')
-                .select(`*, equipos ( nombre_equipo )`)
-                .order('fecha_hora', { ascending: false })
-                .limit(15);
-            
-            if (error) throw error;
-
-            const enrichedData = data.map(item => ({
-                ...item,
-                equipo_nombre: item.equipos?.nombre_equipo
-            }));
-
-            setHistory(enrichedData as any[]);
-        } catch (err: any) {
-            setHistoryError(`Error al cargar el historial: ${err.message}`);
-        } finally {
-            setHistoryLoading(false);
-        }
-    }, [equipos]);
-
-    useEffect(() => {
-        if(!dataLoading){
-            fetchHistory();
-        }
-    }, [dataLoading, fetchHistory]);
     
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setIsLoading(true);
-        setMessage('');
+    const form = useForm<AdditiveFormData>({
+        resolver: zodResolver(additiveSchema),
+        defaultValues: {
+            additive_date: new Date().toISOString().split('T')[0],
+            additive: 'BICKO',
+            additive_quantity: undefined,
+            additive_bio: '',
+        },
+    });
 
-        const formData = new FormData(e.currentTarget);
-        const data = Object.fromEntries(formData.entries());
-
-        try {
-            await createAditivo(data);
-            setMessage('Registro de aditivo guardado con éxito!');
-            e.currentTarget.reset();
-            fetchHistory();
-        } catch (error: any) {
-             setMessage(`Error al guardar el registro: ${error.message}`);
-        } finally {
-            setIsLoading(false);
+    const mutation = useMutation({
+        mutationFn: createAditivo,
+        onSuccess: () => {
+            toast({ title: 'Éxito', description: 'Registro de aditivo guardado con éxito!' });
+            queryClient.invalidateQueries({ queryKey: ['additivesHistory'] });
+            form.reset();
+        },
+        onError: (err: Error) => {
+            toast({ title: 'Error', description: `Error al guardar: ${err.message}`, variant: 'destructive' });
         }
+    });
+
+    const onSubmit = (data: AdditiveFormData) => {
+        mutation.mutate(data);
     };
     
     const handleExport = () => {
-        const dataToExport = history.map(item => ({
+        const dataToExport = (history as EnrichedAditivoRecord[]).map(item => ({
             fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
             aditivo: item.tipo_aditivo,
             cantidad_kg: item.cantidad_kg,
-            equipo: item.equipo_nombre,
+            equipo: item.equipos?.nombre_equipo,
         }));
         exportToCsv('historial_aditivos.csv', dataToExport);
     };
 
-    const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
@@ -406,34 +398,44 @@ const Additives: React.FC = () => {
             <Card>
                 <CardContent className="pt-6">
                   <h2 className="text-lg font-semibold text-text-primary mb-4">Registro de Aditivos</h2>
-                  <form className="space-y-4" onSubmit={handleSubmit}>
-                      <div><Label htmlFor="additive_date">Fecha</Label><Input id="additive_date" name="additive_date" type="date" defaultValue={new Date().toISOString().split('T')[0]} required className={commonInputClasses}/></div>
-                      <div>
-                          <Label htmlFor="additive">Aditivo</Label>
-                          <Select id="additive" name="additive" required className={commonInputClasses}>
-                            {['BICKO', 'HIMAX', 'CAL', 'OTROS'].map(o => <option key={o} value={o}>{o}</option>)}
-                          </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="additive_quantity">Cantidad (kg)</Label>
-                        <Input id="additive_quantity" name="additive_quantity" type="number" min="0" required className={commonInputClasses}/>
-                      </div>
-                      <div>
-                          <Label htmlFor="additive_bio">Biodigestor</Label>
-                          <select
-                              id="additive_bio"
-                              name="additive_bio"
-                              required
-                              className="mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-                              disabled={dataLoading}
-                          >
-                              <option value="">{dataLoading ? 'Cargando...' : 'Seleccione Biodigestor'}</option>
-                              {biodigestores.map(e => <option key={e.id} value={e.id}>{e.nombre_equipo}</option>)}
-                          </select>
-                      </div>
-                      {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
-                      <Button type="submit" variant="secondary" isLoading={isLoading || dataLoading} disabled={dataLoading}>Guardar Registro</Button>
+                  <Form {...form}>
+                  <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                      <FormField control={form.control} name="additive_date" render={({ field }) => (
+                          <FormItem><FormLabel>Fecha</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                      <FormField control={form.control} name="additive" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Aditivo</FormLabel>
+                              <FormControl>
+                                  <Select {...field}>
+                                      {['BICKO', 'HIMAX', 'CAL', 'OTROS'].map(o => <option key={o} value={o}>{o}</option>)}
+                                  </Select>
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )} />
+                      <FormField control={form.control} name="additive_quantity" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Cantidad (kg)</FormLabel>
+                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.valueAsNumber)} /></FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )} />
+                      <FormField control={form.control} name="additive_bio" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel>Biodigestor</FormLabel>
+                              <FormControl>
+                                  <Select {...field} disabled={dataLoading}>
+                                      <option value="">{dataLoading ? 'Cargando...' : 'Seleccione Biodigestor'}</option>
+                                      {biodigestores.map(e => <option key={e.id} value={String(e.id)}>{e.nombre_equipo}</option>)}
+                                  </Select>
+                              </FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )} />
+                      <Button type="submit" variant="secondary" isLoading={mutation.isPending || dataLoading} disabled={dataLoading}>Guardar Registro</Button>
                   </form>
+                  </Form>
                 </CardContent>
             </Card>
 
@@ -449,7 +451,7 @@ const Additives: React.FC = () => {
                   {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                   ) : historyError ? (
-                      <p className="text-center text-error">{historyError}</p>
+                      <p className="text-center text-error">{(historyError as Error).message}</p>
                   ) : history.length === 0 ? (
                       <p className="text-center text-text-secondary py-4">No hay registros de aditivos.</p>
                   ) : (
@@ -464,12 +466,12 @@ const Additives: React.FC = () => {
                                    </tr>
                                </thead>
                                <tbody className="bg-surface divide-y divide-border">
-                                  {history.map(item => (
+                                  {(history as EnrichedAditivoRecord[]).map(item => (
                                       <tr key={item.id}>
                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora).toLocaleString('es-AR')}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.tipo_aditivo}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary`}>{item.cantidad_kg}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary`}>{item.equipo_nombre}</td>
+                                          <td className={`${commonTableClasses.cell} text-text-primary`}>{item.equipos?.nombre_equipo}</td>
                                       </tr>
                                   ))}
                                </tbody>

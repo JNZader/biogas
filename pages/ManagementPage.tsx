@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useMemo } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
@@ -156,8 +153,6 @@ const ManagementPage: React.FC = () => {
         if (!deleteConfirmation.item) return;
         
         setDeleteLoading(true);
-        // FIX: The compiler incorrectly infers the item's complex union type as 'never'.
-        // Using a structural type assertion to safely access the 'id' property.
         const id = (deleteConfirmation.item as { id: number }).id;
         const tableName = getTableName(activeTab);
 
@@ -184,14 +179,13 @@ const ManagementPage: React.FC = () => {
         
         if(activeTab === 'proveedores'){ data.tipo_empresa = 'proveedor'; }
         if(activeTab === 'transportistas'){ data.tipo_empresa = 'transportista'; }
-        // FIX: Cast `data` to `any` before assigning a number to prevent a type conflict with FormDataEntryValue (string | File).
         if(activeTab === 'equipos' && activePlanta) { (data as any).planta_id = activePlanta.id; }
         
         try {
             if (modalMode === 'add') {
                 await createEntity({ tableName, data });
             } else if (currentItem) {
-                await updateEntity({ tableName, data, id: currentItem.id });
+                await updateEntity({ tableName, data, id: (currentItem as { id: number }).id });
             }
             
             await refreshData();
@@ -214,7 +208,7 @@ const ManagementPage: React.FC = () => {
             if (modalMode === 'add') {
                 await createEntity({ tableName, data });
             } else if (currentItem) {
-                await updateEntity({ tableName, data, id: currentItem.id });
+                await updateEntity({ tableName, data, id: (currentItem as { id: number }).id });
             }
             
             await refreshData();
@@ -275,7 +269,7 @@ const ManagementPage: React.FC = () => {
         if ('nombre' in item) return item.nombre;
         if ('patente' in item) return item.patente;
         if ('nombre_equipo' in item) return item.nombre_equipo;
-        return `ítem con ID ${item.id}`;
+        return `ítem con ID ${(item as { id: number }).id}`;
     };
 
     const renderTable = () => {

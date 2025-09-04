@@ -4,10 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import Page from '../components/Page';
 import { BoltIcon, FireIcon, BeakerIcon, AdjustmentsHorizontalIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
-import type { KpiCardProps } from '../types';
 import { useThemeColors } from '../stores/useThemeColors';
 import { supabase } from '../services/supabaseClient';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale/es';
 import { cn } from '../lib/utils';
 import { useStore as useZustandStore } from 'zustand';
@@ -36,7 +35,7 @@ const fetchDashboardData = async (timeRange: number) => {
         ch4: (gasRes.data?.ch4_porcentaje || 0).toFixed(1),
     };
     const chartData = (chartRes.data || []).map(d => ({
-        name: format(parseISO(d.fecha), 'dd/MM', { locale: es }),
+        name: format(new Date(d.fecha), 'dd/MM', { locale: es }),
         'Biogás (kg)': d.flujo_biogas_kg_dia || 0,
         'Electricidad (kWh)': d.generacion_electrica_total_kwh_dia || 0,
     }));
@@ -45,7 +44,15 @@ const fetchDashboardData = async (timeRange: number) => {
 };
 
 
-// --- Co-located Component ---
+// --- Co-located Component & Type Definition ---
+export interface KpiCardProps {
+  title: string;
+  value: string;
+  unit?: string;
+  trend: number; // percentage change, e.g., 5 for +5%, -2 for -2%
+  icon: React.ReactNode;
+}
+
 export const KpiCard: React.FC<KpiCardProps> = ({ title, value, unit, trend, icon }) => {
   const isPositive = trend >= 0;
   const trendColor = isPositive ? 'text-success' : 'text-error';
@@ -149,7 +156,6 @@ const HomePage: React.FC = () => {
     queryFn: () => fetchDashboardData(timeRange),
   });
 
-  // FIX: Replaced the 'onSuccess' callback in useQuery with a useEffect hook to handle side effects, aligning with TanStack Query v5 best practices and resolving the type error.
   useEffect(() => {
     if (data?.kpiData) {
         evaluateAlerts({

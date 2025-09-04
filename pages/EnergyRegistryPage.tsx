@@ -43,7 +43,6 @@ const fetchEnergyHistory = async (plantaId: number): Promise<EnergiaRecord[]> =>
     return data || [];
 };
 
-// FIX: Changed the type of `recordData` to the correct Insert type for the 'energia' table.
 const createEnergyRecord = async (recordData: Database['public']['Tables']['energia']['Insert']) => {
     const { error } = await supabase.from('energia').insert(recordData);
     if (error) throw error;

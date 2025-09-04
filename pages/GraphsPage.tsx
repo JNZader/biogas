@@ -37,7 +37,6 @@ interface SubstrateMixData {
     value: number;
 }
 
-// FIX: Updated PieLabelRenderProps to allow optional properties to match the type expected by recharts' PieLabel, resolving the TypeScript error.
 interface PieLabelRenderProps {
     cx: number;
     cy: number;
@@ -133,7 +132,6 @@ const GraphsPage: React.FC = () => {
     const SUBSTRATE_CHART_COLORS = [themeColors.primary, themeColors.secondary, themeColors.accent, themeColors.textSecondary, '#3B82F6', '#F97316'];
 
     const renderCustomizedPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: PieLabelRenderProps) => {
-        // FIX: Added guard clauses to handle optional `midAngle` and `percent` properties to align with recharts' PieLabelProps type and prevent runtime errors.
         if (midAngle === undefined || percent === undefined) {
             return null;
         }

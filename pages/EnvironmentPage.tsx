@@ -1,10 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Page from '../components/Page';
-// FIX: Use named import for Card from the new UI component path.
 import { Card, CardContent } from '../components/ui/Card';
-// FIX: Use named import for Button from the new UI component path.
 import { Button } from '../components/ui/Button';
-// FIX: Replace deprecated InputField with new UI components.
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
@@ -245,7 +242,6 @@ const EnvironmentPage: React.FC = () => {
             {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
 
             <div className="pt-4">
-              {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
               <Button type="submit" variant="default" isLoading={isLoading} disabled={isLoading}>Guardar Monitoreo</Button>
             </div>
           </form>

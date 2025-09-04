@@ -6,8 +6,7 @@
  * dynamic page title updates.
  */
 
-import React, { useEffect } from 'react';
-// FIX: Updated package name from '@tanstack/router' to '@tanstack/react-router'.
+import React, { useEffect, Suspense } from 'react';
 import { Outlet, useRouterState } from '@tanstack/react-router';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import Header from './components/Header';
@@ -17,8 +16,8 @@ import { Toaster } from './components/ui/Toaster';
 import { useThemeStore } from './stores/themeStore';
 import { SupabaseDataProvider } from './contexts/SupabaseContext';
 import { AuthProvider } from './contexts/AuthContext.tsx';
-// FIX: Import 'cn' utility function to resolve 'Cannot find name 'cn'' error.
 import { cn } from './lib/utils';
+import Spinner from './components/ui/Spinner';
 
 const pathTitleMap: { [key: string]: string } = {
   '/': 'Dashboard',
@@ -43,6 +42,7 @@ const pathTitleMap: { [key: string]: string } = {
   '/alarms': 'Alarmas',
   '/user-management': 'Gestión de Usuarios',
   '/change-password': 'Cambiar Contraseña',
+  '/error-detective': 'Error Detective',
 };
 
 /**
@@ -70,14 +70,15 @@ const App: React.FC = () => {
   }, [pageTitle]);
 
   return (
-    // FIX: Wrapped application with SupabaseDataProvider to provide context data.
     <AuthProvider>
       <SupabaseDataProvider>
         <ErrorBoundary>
           <div className="flex flex-col h-screen font-sans text-text-primary bg-background">
             {showNav && <Header title={pageTitle} />}
             <main className={cn("flex-grow overflow-y-auto", { "pb-20": showNav })}>
-              <Outlet />
+              <Suspense fallback={<Spinner />}>
+                <Outlet />
+              </Suspense>
             </main>
             {showNav && <BottomNav />}
             <Toaster />

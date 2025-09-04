@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../components/ui/Card';
@@ -16,6 +17,7 @@ import { useToast } from '../hooks/use-toast';
 import EmptyState from '../components/EmptyState';
 import { cn } from '../lib/utils';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
+import { ModuloId } from '../types/branded';
 
 
 const UserManagementPage: React.FC = () => {
@@ -30,7 +32,7 @@ const UserManagementPage: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'invite' | 'edit'>('invite');
     const [currentUser, setCurrentUser] = useState<any | null>(null);
-    const [userPermissions, setUserPermissions] = useState<Set<number>>(new Set());
+    const [userPermissions, setUserPermissions] = useState<Set<ModuloId>>(new Set());
     const [formLoading, setFormLoading] = useState(false);
 
     const ROLES = ['Super Admin', 'Admin', 'Operador', 'Visualizador'];
@@ -72,13 +74,13 @@ const UserManagementPage: React.FC = () => {
             if (error) {
                 toast({ title: 'Error', description: 'No se pudieron cargar los permisos del usuario.', variant: 'destructive' });
             } else {
-                setUserPermissions(new Set(data.map(p => p.idmodulo).filter(id => id !== null) as number[]));
+                setUserPermissions(new Set(data.map(p => p.idmodulo).filter(id => id !== null) as ModuloId[]));
             }
         }
         setIsModalOpen(true);
     };
 
-    const handlePermissionChange = (moduleId: number) => {
+    const handlePermissionChange = (moduleId: ModuloId) => {
         setUserPermissions(prev => {
             const newPermissions = new Set(prev);
             if (newPermissions.has(moduleId)) {
@@ -197,8 +199,8 @@ const UserManagementPage: React.FC = () => {
                                             <Label htmlFor={`perm-${mod.id}`} className="capitalize">{mod.nombre?.replace(/_/g, ' ')}</Label>
                                             <Switch
                                                 id={`perm-${mod.id}`}
-                                                checked={userPermissions.has(mod.id)}
-                                                onCheckedChange={() => handlePermissionChange(mod.id)}
+                                                checked={userPermissions.has(mod.id as ModuloId)}
+                                                onCheckedChange={() => handlePermissionChange(mod.id as ModuloId)}
                                             />
                                         </div>
                                     ))}

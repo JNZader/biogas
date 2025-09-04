@@ -4,7 +4,6 @@ import type { Database } from '../types/database';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
-// FIX: Export the 'supabase' client instance. It was declared but not exported, causing import errors across the application.
 export let supabase: SupabaseClient<Database>;
 
 if (supabaseUrl && supabaseAnonKey) {
@@ -228,9 +227,9 @@ if (supabaseUrl && supabaseAnonKey) {
     mantenimiento_eventos: [],
     checklist_registros: [],
     repuestos: [
-        { id: 1, nombre_repuesto: 'Bujía Motor CHP', codigo_sku: 'CHP-SP-001', stock_actual: 12, stock_minimo: 4, stock_maximo: 16, proveedor_principal_empresa_id: 3 },
-        { id: 2, nombre_repuesto: 'Aceite Motor (200L)', codigo_sku: 'CHP-OIL-200', stock_actual: 2, stock_minimo: 1, stock_maximo: 3, proveedor_principal_empresa_id: 3 },
-        { id: 3, nombre_repuesto: 'Sello Mecánico Bomba P-002', codigo_sku: 'PMP-SEAL-002', stock_actual: 1, stock_minimo: 2, stock_maximo: 4, proveedor_principal_empresa_id: 1 },
+        { id: 1, nombre_repuesto: 'Bujía Motor CHP', codigo_sku: 'CHP-SP-001', stock_actual: 12, stock_minimo: 4, stock_maximo: 16, proveedor_principal_empresa_id: 3, planta_id: 1 },
+        { id: 2, nombre_repuesto: 'Aceite Motor (200L)', codigo_sku: 'CHP-OIL-200', stock_actual: 2, stock_minimo: 1, stock_maximo: 3, proveedor_principal_empresa_id: 3, planta_id: 1 },
+        { id: 3, nombre_repuesto: 'Sello Mecánico Bomba P-002', codigo_sku: 'PMP-SEAL-002', stock_actual: 1, stock_minimo: 2, stock_maximo: 4, proveedor_principal_empresa_id: 1, planta_id: 1 },
     ],
   };
 
@@ -240,7 +239,6 @@ if (supabaseUrl && supabaseAnonKey) {
     let maybeSingle = false;
     let selectStr = '*';
 
-    // FIX: Add mock join logic for relational queries
     const applyJoins = (result: any[]) => {
         if (!selectStr || !selectStr.includes('(')) return result;
 
@@ -271,61 +269,64 @@ if (supabaseUrl && supabaseAnonKey) {
 
     const execute = async () => {
         const joinedResult = applyJoins(queryResult);
-        if (maybeSingle && joinedResult.length === 0) {
-            return { data: null, error: null };
+        // FIX: Replaced corrupted/incomplete logic with a full implementation that correctly handles single() and maybeSingle() based on Supabase API behavior.
+        if ((single || maybeSingle) && joinedResult.length > 1) {
+            return { data: null, error: { message: 'Query returned more than one row', code: 'PGRST116' } };
+        }
+        if (single && joinedResult.length !== 1) {
+            return { data: null, error: { message: `Query returned ${joinedResult.length} rows, but single() was called.`, code: 'PGRST116' } };
+        }
+        if (maybeSingle) {
+            return { data: joinedResult[0] || null, error: null };
         }
         if (single) {
-            if (joinedResult.length > 1) {
-                return { data: null, error: { message: 'More than one row returned', code: 'PGRST116' } };
-            }
-            if (joinedResult.length === 0) {
-                return { data: null, error: { message: 'No rows found', code: 'PGRST116' } };
-            }
             return { data: joinedResult[0], error: null };
         }
         return { data: joinedResult, error: null };
     };
 
     const builder = {
-        select: (str: string = '*') => {
-          selectStr = str;
-          return builder;
+        select: (str: string) => {
+            selectStr = str;
+            return builder;
         },
         insert: (newData: any) => {
             const items = Array.isArray(newData) ? newData : [newData];
             items.forEach(item => {
-                const newId = (mockDatabase[tableName]?.length ?? 0) + 1;
-                mockDatabase[tableName].push({ id: newId, ...item });
+                const newId = Math.max(...data.map(d => d.id || 0), 0) + 1;
+                data.push({ ...item, id: newId, created_at: new Date().toISOString() });
             });
-            // Simplified: insert doesn't usually chain to select in mock
-            return {
-                select: () => ({
-                    single: async () => ({ data: items[0], error: null }),
-                }),
-            };
+            const p = Promise.resolve({ data: items, error: null });
+            (p as any).select = () => p;
+            (p as any).single = () => p;
+            return p;
         },
-        update: (updatedData: any) => {
-            // Update not implemented for mock
-            return builder;
+        update: (newData: any) => {
+            const p = new Promise(resolve => {
+                queryResult.forEach(itemToUpdate => {
+                    const index = data.findIndex(item => item.id === itemToUpdate.id);
+                    if (index > -1) {
+                        data[index] = { ...data[index], ...newData, updated_at: new Date().toISOString() };
+                    }
+                });
+                resolve({ data: null, error: null });
+            });
+            return { then: (onfulfilled: any, onrejected: any) => p.then(onfulfilled, onrejected) };
         },
         delete: () => {
-             // Delete not implemented for mock
-            return builder;
+             const p = new Promise(resolve => {
+                queryResult.forEach(itemToDelete => {
+                    const index = data.findIndex(item => item.id === itemToDelete.id);
+                    if (index > -1) {
+                        data.splice(index, 1);
+                    }
+                });
+                resolve({ data: null, error: null });
+             });
+             return { then: (onfulfilled: any, onrejected: any) => p.then(onfulfilled, onrejected) };
         },
         eq: (column: string, value: any) => {
             queryResult = queryResult.filter(row => row[column] === value);
-            return builder;
-        },
-        is: (column: string, value: any) => {
-            if (value === null) {
-                queryResult = queryResult.filter(row => row[column] === null || row[column] === undefined);
-            }
-            return builder;
-        },
-        not: (column: string, operator: string, value: any) => {
-            if(operator === 'is' && value === null) {
-                queryResult = queryResult.filter(row => row[column] !== null && row[column] !== undefined);
-            }
             return builder;
         },
         gte: (column: string, value: any) => {
@@ -336,7 +337,17 @@ if (supabaseUrl && supabaseAnonKey) {
             queryResult = queryResult.filter(row => row[column] < value);
             return builder;
         },
-        order: (column: string, { ascending = true }: { ascending?: boolean } = {}) => {
+        not: (column: string, operator: string, value: any) => {
+            if (operator === 'is') {
+                queryResult = queryResult.filter(row => row[column] !== value);
+            }
+            return builder;
+        },
+        is: (column: string, value: any) => {
+            queryResult = queryResult.filter(row => row[column] === value);
+            return builder;
+        },
+        order: (column: string, { ascending } = { ascending: true }) => {
             queryResult.sort((a, b) => {
                 if (a[column] < b[column]) return ascending ? -1 : 1;
                 if (a[column] > b[column]) return ascending ? 1 : -1;
@@ -344,86 +355,47 @@ if (supabaseUrl && supabaseAnonKey) {
             });
             return builder;
         },
-        limit: (count: number) => {
-            queryResult = queryResult.slice(0, count);
+        limit: (num: number) => {
+            queryResult = queryResult.slice(0, num);
             return builder;
         },
         single: () => {
             single = true;
-            return execute();
+            return { then: (onfulfilled: any, onrejected: any) => execute().then(onfulfilled, onrejected) };
         },
         maybeSingle: () => {
             maybeSingle = true;
-            return execute();
+            return { then: (onfulfilled: any, onrejected: any) => execute().then(onfulfilled, onrejected) };
         },
-        then: (callback: any) => {
-            return execute().then(callback);
+        then: (onfulfilled: any, onrejected: any) => {
+            return execute().then(onfulfilled, onrejected);
         },
     };
     return builder;
   };
 
-  const mockFrom = (tableName: string) => {
-    if (!mockDatabase[tableName]) {
-        console.error(`Mock table "${tableName}" does not exist.`);
-        return mockQueryBuilder(tableName, []);
-    }
-    return mockQueryBuilder(tableName, mockDatabase[tableName]);
-  };
-  
-  // FIX: Add a mock implementation for `supabase.auth` to prevent runtime errors when environment variables are not set.
-  const mockUser = {
-      id: 'mock-user-uuid-12345',
-      email: 'juan.perez@example.com',
-  };
-  
-  let mockSession: { user: any, access_token: string } | null = {
-      user: mockUser,
-      access_token: 'mock-token',
-  };
-
-  let onAuthStateChangeCallback: (event: string, session: typeof mockSession | null) => void;
-
   supabase = {
-    from: mockFrom,
+    from: (tableName: string) => mockQueryBuilder(tableName, mockDatabase[tableName] || []),
     auth: {
-        getSession: async () => ({ data: { session: mockSession }, error: null }),
-        // FIX: Corrected the mock function signature for `onAuthStateChange` to properly handle the callback, preventing a runtime error.
-        onAuthStateChange: (callback: (event: string, session: typeof mockSession | null) => void) => {
-            onAuthStateChangeCallback = callback;
-            callback('INITIAL_SESSION', mockSession);
-            return {
-                data: {
-                    subscription: {
-                        unsubscribe: () => {},
-                    },
-                },
-            };
-        },
-        signInWithPassword: async ({ email }: { email: string }) => {
-            const userProfile = mockDatabase.usuarios.find(u => u.correo === email);
-            if (!userProfile) {
-                return { data: null, error: { message: "Invalid login credentials" } };
-            }
-            mockSession = { user: { id: userProfile.idauth, email: userProfile.correo }, access_token: `mock-token-${userProfile.idauth}` };
-            onAuthStateChangeCallback('SIGNED_IN', mockSession);
-            return { data: { session: mockSession, user: mockSession.user }, error: null };
-        },
-        signOut: async () => {
-            mockSession = null;
-            onAuthStateChangeCallback('SIGNED_OUT', null);
-            return { error: null };
-        },
-        resetPasswordForEmail: async (email: string) => {
-            console.log(`[MOCK] Password reset email sent to ${email}. Redirect URL would be http://localhost:PORT/#/update-password`);
-            return { data: {}, error: null };
-        },
-        updateUser: async ({ password }: { password?: string }) => {
-            if (password) {
-                 console.log("[MOCK] User password updated successfully.");
-            }
-            return { data: { user: mockSession?.user }, error: null };
-        },
+      session: () => ({
+        user: { id: 'mock-user-uuid-12345', email: 'juan.perez@example.com' },
+        access_token: 'mock-token',
+        token_type: 'bearer',
+      } as any),
+      onAuthStateChange: () => {
+          return { data: { subscription: { unsubscribe: () => {} } } };
+      },
+      signOut: () => Promise.resolve({ error: null }),
+      signIn: ({ email, password }) => {
+        if (email === 'juan.perez@example.com' && password === 'password') {
+            return Promise.resolve({ user: { id: 'mock-user-uuid-12345', email: 'juan.perez@example.com' }, session: {} as any, error: null });
+        }
+        return Promise.resolve({ user: null, session: null, error: { message: 'Invalid credentials' } });
+      },
+      update: (data) => Promise.resolve({ user: {id: 'mock-user-uuid-12345', email: 'juan.perez@example.com', ...data} as any, error: null }),
+      api: {
+          sendPasswordRestEmail: () => Promise.resolve({ data: {}, error: null })
+      }
     },
   } as any;
 }

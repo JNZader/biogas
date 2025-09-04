@@ -34,7 +34,8 @@ const LoginPage: React.FC = () => {
     const { isSubmitting } = form.formState;
 
     const onSubmit = async (data: LoginFormData) => {
-        const { error } = await supabase.auth.signInWithPassword({
+        // FIX: Replaced 'signInWithPassword' with the older 'signIn' method to align with the Supabase Auth v1 API, resolving the 'property does not exist' error.
+        const { error } = await supabase.auth.signIn({
             email: data.email,
             password: data.password,
         });

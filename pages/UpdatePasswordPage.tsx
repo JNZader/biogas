@@ -44,7 +44,8 @@ const UpdatePasswordPage: React.FC = () => {
     const { isSubmitting } = form.formState;
 
     const onSubmit = async (data: UpdatePasswordFormData) => {
-        const { error } = await supabase.auth.updateUser({ password: data.password });
+        // FIX: Replaced 'updateUser' with the older 'update' method to align with the Supabase Auth v1 API, resolving the 'property does not exist' error.
+        const { error } = await supabase.auth.update({ password: data.password });
 
         if (error) {
             toast({ title: 'Error', description: error.message, variant: 'destructive' });

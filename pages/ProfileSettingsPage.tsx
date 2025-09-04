@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import Page from '../components/Page';
-// FIX: Corrected the import path for the Card component from the obsolete '../components/Card' to the correct '../components/ui/Card', resolving the module not found error.
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -151,7 +150,6 @@ const ProfileSettingsPage: React.FC = () => {
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
                         <Label htmlFor="language">Idioma</Label>
-                        {/* FIX: Replaced onValueChange with onChange and simplified component structure */}
                         <Select id="language" value={language} onChange={(e) => setLanguage(e.target.value)}>
                             <SelectItem value="es">Español</SelectItem>
                             <SelectItem value="en">English</SelectItem>
@@ -159,7 +157,6 @@ const ProfileSettingsPage: React.FC = () => {
                     </div>
                      <div className="space-y-2">
                         <Label htmlFor="timezone">Zona Horaria</Label>
-                        {/* FIX: Replaced onValueChange with onChange and simplified component structure */}
                         <Select id="timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
                             <SelectItem value="gmt-3">GMT-3 (Buenos Aires)</SelectItem>
                             <SelectItem value="gmt-5">GMT-5 (Bogotá, Lima)</SelectItem>

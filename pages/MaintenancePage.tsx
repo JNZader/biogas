@@ -1,14 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Page from '../components/Page';
-// FIX: Use named import for Card from the new UI component path.
 import { Card, CardContent } from '../components/ui/Card';
-// FIX: Use named import for Button from the new UI component path.
 import { Button } from '../components/ui/Button';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
-// FIX: Replace deprecated Modal with new Dialog component.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
-// FIX: Replace deprecated InputField with new UI components.
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Textarea } from '../components/ui/Textarea';
@@ -19,6 +15,7 @@ import QuickAddModal, { FormField as QuickFormField } from '../components/QuickA
 import { useToast } from '../hooks/use-toast.ts';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { exportToCsv } from '../lib/utils';
+import { ChecklistItemId } from '../types/branded';
 
 
 type ChecklistItem = Database['public']['Tables']['checklist_items']['Row'];
@@ -119,7 +116,7 @@ const Checklist: React.FC = () => {
         return orderedIds;
     }, [groupedItems, subsistemas]);
 
-    const handleVerify = async (itemId: number) => {
+    const handleVerify = async (itemId: ChecklistItemId) => {
         // Optimistically update the UI
         setItems(prevItems => prevItems.map(item => 
             item.id === itemId ? { ...item, checked: true } : item,
@@ -186,7 +183,7 @@ const Checklist: React.FC = () => {
                                                 </span>
                                                 <button 
                                                     className={`ml-4 px-3 py-1 text-sm rounded-full transition-colors duration-200 ${item.checked ? 'bg-success-bg text-success' : 'bg-primary/20 text-primary hover:bg-primary/30'}`}
-                                                    onClick={() => handleVerify(item.id)}
+                                                    onClick={() => handleVerify(item.id as ChecklistItemId)}
                                                     disabled={item.checked}
                                                 >
                                                     {item.checked ? 'Verificado' : 'Verificar'}
@@ -315,7 +312,6 @@ const Tasks: React.FC = () => {
             fecha_inicio: formData.get('fecha_inicio') as string,
             fecha_planificada: (formData.get('fecha_planificada') as string) || null,
             usuario_responsable_id: 1, // Hardcoded for demo
-// FIX: Added the required `planta_id` field to the insert data object.
             planta_id: 1, // Hardcoded for demo
         };
 
@@ -336,7 +332,6 @@ const Tasks: React.FC = () => {
         }
     };
     
-    // FIX: Removed `as const` and used an explicit type to avoid readonly issues with the `fields` array when setting state, while still preserving literal types.
     const quickAddConfig: {
         equipo: { entity: string; tableName: 'equipos'; fields: QuickFormField[] };
         tipoMantenimiento: { entity: string; tableName: 'tipos_mantenimiento'; fields: QuickFormField[] };
@@ -536,7 +531,6 @@ const Tasks: React.FC = () => {
 
                         <div className="flex justify-end space-x-3 pt-4">
                             <Button type="button" onClick={handleCloseModal} className="w-auto bg-border text-text-primary hover:bg-border/80">Cancelar</Button>
-                            {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
                             <Button type="submit" variant="default" className="w-auto" isLoading={formLoading}>
                                 Guardar Tarea
                             </Button>

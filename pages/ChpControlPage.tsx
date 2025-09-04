@@ -18,6 +18,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { exportToCsv } from '../lib/utils';
+import { PlantaId } from '../types/branded';
 
 type ChpChangeRecord = Database['public']['Tables']['cambios_potencia_chp']['Row'];
 
@@ -33,7 +34,7 @@ const chpSchema = z.object({
 type ChpFormData = z.infer<typeof chpSchema>;
 
 // --- Co-located API Logic ---
-const fetchChpHistory = async (plantaId: number): Promise<ChpChangeRecord[]> => {
+const fetchChpHistory = async (plantaId: PlantaId): Promise<ChpChangeRecord[]> => {
     const { data, error } = await supabase
         .from('cambios_potencia_chp')
         .select('*')
@@ -57,7 +58,7 @@ const ChpControlPage: React.FC = () => {
 
     const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({
         queryKey: ['chpHistory', activePlanta?.id],
-        queryFn: () => fetchChpHistory(activePlanta!.id),
+        queryFn: () => fetchChpHistory(activePlanta!.id as PlantaId),
         enabled: !!activePlanta,
     });
 

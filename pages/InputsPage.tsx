@@ -17,7 +17,6 @@ import QuickAddModal, { FormField as QuickFormField } from '../components/QuickA
 
 
 // --- Co-located Zod Schema ---
-// FIX: Replaced z.coerce.number with z.number since coercion is handled in the component's onChange event, resolving type inference issues.
 const ingresoSchema = z.object({
   camion_id: z.string().min(1, "Debe seleccionar un camión."),
   remito: z.string().min(1, "El número de remito es requerido."),
@@ -89,7 +88,6 @@ const InputsPage: React.FC = () => {
         }
     });
 
-    // FIX: Removed `as const` and used an explicit type to avoid readonly issues with the `fields` array when setting state, while still preserving literal types.
     const quickAddConfig: {
         sustrato: { entity: string; tableName: 'sustratos'; fields: QuickFormField[] };
         proveedor: { entity: string; tableName: 'empresa'; extraData: { tipo_empresa: string }; fields: QuickFormField[] };
@@ -238,7 +236,6 @@ const InputsPage: React.FC = () => {
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Cantidad (Peso Neto kg)</FormLabel>
-                                                {/* FIX: Added an onChange handler to explicitly convert the input value to a number for type consistency. */}
                                                 <FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -266,7 +263,6 @@ const InputsPage: React.FC = () => {
                                 </div>
                             </fieldset>
                                                 
-                            {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
                             <Button type="submit" variant="default" isLoading={mutation.isPending || dataLoading} disabled={dataLoading}>Registrar Ingreso</Button>
                         </form>
                     </Form>

@@ -13,22 +13,26 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
 /**
  * Represents the analysis of a substrate used for biogas production.
+ * This data is sent to the AI model to generate feeding recommendations.
  */
 export interface SubstrateAnalysis {
-  /** Percentage of lipids in the substrate. */
+  /** Percentage of lipids in the substrate. High values can increase methane yield but also risk foaming. */
   lipids: number;
-  /** Percentage of proteins in the substrate. */
+  /** Percentage of proteins in the substrate. A key source of nitrogen, but high levels can lead to ammonia inhibition. */
   proteins: number;
-  /** Percentage of carbohydrates in the substrate. */
+  /** Percentage of carbohydrates in the substrate. Readily digestible but can cause rapid acidification if overloaded. */
   carbs: number;
-  /** Percentage of total solids (TS) in the substrate. */
+  /** Percentage of total solids (TS) in the substrate. Represents the dry matter content. */
   totalSolids: number;
-  /** Percentage of volatile solids (VS) as a fraction of total solids. */
+  /** Percentage of volatile solids (VS) as a fraction of total solids. Represents the organic, digestible portion of the substrate. */
   volatileSolids: number;
 }
 
 /**
  * Calls the Gemini AI model to get an optimal feeding recommendation.
+ * The function constructs a detailed prompt including the substrate analysis
+ * and asks the model for a recommendation formatted in markdown.
+ * 
  * @param {SubstrateAnalysis} analysis - The substrate analysis data.
  * @returns {Promise<string>} A promise that resolves to the AI-generated recommendation in markdown format.
  * @throws {Error} Throws an error if the API call fails or the API key is not configured.

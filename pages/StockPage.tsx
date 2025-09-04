@@ -16,13 +16,14 @@ import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
 import { exportToCsv } from '../lib/utils';
+import { PlantaId, RepuestoId } from '../types/branded';
 
 type Repuesto = Database['public']['Tables']['repuestos']['Row'];
 type RepuestoInsert = Database['public']['Tables']['repuestos']['Insert'];
 type RepuestoUpdate = Database['public']['Tables']['repuestos']['Update'];
 
 // --- Co-located API Logic ---
-const fetchStockItems = async (plantaId: number): Promise<Repuesto[]> => {
+const fetchStockItems = async (plantaId: PlantaId): Promise<Repuesto[]> => {
     const { data, error } = await supabase
         .from('repuestos')
         .select('*')
@@ -37,12 +38,12 @@ const createStockItem = async (item: RepuestoInsert) => {
     if (error) throw error;
 };
 
-const updateStockItem = async ({ id, item }: { id: number, item: RepuestoUpdate }) => {
+const updateStockItem = async ({ id, item }: { id: RepuestoId, item: RepuestoUpdate }) => {
     const { error } = await supabase.from('repuestos').update(item).eq('id', id);
     if (error) throw error;
 };
 
-const deleteStockItem = async (id: number) => {
+const deleteStockItem = async (id: RepuestoId) => {
     const { error } = await supabase.from('repuestos').delete().eq('id', id);
     if (error) throw error;
 };
@@ -50,8 +51,8 @@ const deleteStockItem = async (id: number) => {
 // --- Type for the mutation variables, using a discriminated union for type safety ---
 type MutationVars = 
   | { mode: 'add'; item: RepuestoInsert }
-  | { mode: 'edit'; item: RepuestoUpdate; id: number }
-  | { mode: 'delete'; id: number };
+  | { mode: 'edit'; item: RepuestoUpdate; id: RepuestoId }
+  | { mode: 'delete'; id: RepuestoId };
 
 
 const StockPage: React.FC = () => {
@@ -67,13 +68,10 @@ const StockPage: React.FC = () => {
 
     const { data: stockItems = [], isLoading: stockLoading, error } = useQuery({
         queryKey: ['stockItems', activePlanta?.id],
-        queryFn: () => fetchStockItems(activePlanta!.id),
+        queryFn: () => fetchStockItems(activePlanta!.id as PlantaId),
         enabled: !!activePlanta,
     });
     
-    // FIX: Updated the mutation function to use a discriminated union (MutationVars) for its variables.
-    // This ensures that the payload for 'add' operations is correctly typed as RepuestoInsert,
-    // resolving the error where a required property was missing.
     const mutation = useMutation({
         mutationFn: (vars: MutationVars) => {
             switch (vars.mode) {
@@ -132,7 +130,7 @@ const StockPage: React.FC = () => {
         if (modalMode === 'add') {
             mutation.mutate({ mode: 'add', item: dataToSubmit });
         } else if (currentItem) {
-            mutation.mutate({ mode: 'edit', id: currentItem.id, item: dataToSubmit });
+            mutation.mutate({ mode: 'edit', id: currentItem.id as RepuestoId, item: dataToSubmit });
         }
     };
     
@@ -146,7 +144,7 @@ const StockPage: React.FC = () => {
     
     const handleConfirmDelete = async () => {
         if (!deleteConfirmation.item) return;
-        mutation.mutate({ mode: 'delete', id: deleteConfirmation.item.id });
+        mutation.mutate({ mode: 'delete', id: deleteConfirmation.item.id as RepuestoId });
     };
 
     const getStatus = (item: Repuesto) => {

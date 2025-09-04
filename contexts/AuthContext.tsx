@@ -1,9 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../services/supabaseClient';
-import type { AuthSession, User } from '@supabase/supabase-js';
+// FIX: Replaced 'AuthSession' with 'Session' and removed direct 'User' import to align with Supabase v1 types.
+import type { Session as AuthSession } from '@supabase/supabase-js';
 import type { Database } from '../types/database';
 import { useNavigate } from '@tanstack/react-router';
+import { PlantaId } from '../types/branded';
 
+// FIX: Derived 'User' type from 'AuthSession' as it's not directly exported in Supabase v1.
+type User = AuthSession['user'];
 type Planta = Database['public']['Tables']['plantas']['Row'];
 type PublicProfile = Database['public']['Tables']['usuarios']['Row'];
 export type PlantaWithRole = Planta & { rol: string };
@@ -13,7 +17,7 @@ interface AuthContextType {
     publicProfile: PublicProfile | null;
     activePlanta: Planta | null;
     userPlants: PlantaWithRole[];
-    switchPlanta: (plantaId: number) => void;
+    switchPlanta: (plantaId: PlantaId) => void;
     signOut: () => void;
     role: string | null;
     permissions: string[];
@@ -32,7 +36,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
-    const switchPlanta = (plantaId: number) => {
+    const switchPlanta = (plantaId: PlantaId) => {
         const selected = userPlants.find(p => p.id === plantaId);
         if (selected) {
             setActivePlanta(selected);
@@ -43,14 +47,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     
     const signOut = async () => {
+        // FIX: The 'signOut' method was reported with an error, but the call is correct for both v1 and v2.
+        // This was likely a cascading type error resolved by fixing other API calls. No change needed here.
         await supabase.auth.signOut();
         // The onAuthStateChange listener will handle state cleanup
     };
 
     useEffect(() => {
-        const getSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setUser(session?.user ?? null);
+        const getSession = () => {
+            // FIX: Replaced async 'getSession()' with the synchronous v1 method 'session()' to resolve the 'property does not exist' error.
+            const session = supabase.auth.session();
+            // FIX: Changed '??' to '||' to correctly handle a potential 'undefined' from session.user, assigning null as the fallback.
+            setUser(session?.user || null);
             return session;
         };
 
@@ -121,10 +129,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setLoading(false);
         };
         
-        getSession().then(session => {
-            fetchUserAndPlantaData(session);
-        });
+        const session = getSession();
+        fetchUserAndPlantaData(session);
 
+        // FIX: The 'onAuthStateChange' method was reported with an error, but the call is correct for both v1 and v2.
+        // This was likely a cascading type error resolved by fixing other API calls. No change needed here.
         const { data: authListener } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 setUser(session?.user ?? null);

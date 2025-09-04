@@ -7,7 +7,8 @@ import '@testing-library/jest-dom';
 // FIX: Import test runner functions from Vitest to resolve 'Cannot find name' errors.
 import { describe, it, expect, vi } from 'vitest';
 import { KpiCard } from '../../pages/HomePage'; // The component is co-located here
-import type { KpiCardProps } from '../../types';
+// FIX: Corrected the import path for 'KpiCardProps' to point to 'pages/HomePage.tsx' where the type is co-located, resolving the 'not a module' error from the empty 'types/index.ts' file.
+import type { KpiCardProps } from '../../pages/HomePage';
 import { BoltIcon } from '@heroicons/react/24/outline';
 
 // Mocking HeroIcons to make assertions simpler

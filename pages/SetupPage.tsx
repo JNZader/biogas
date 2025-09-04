@@ -1,15 +1,12 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Page from '../components/Page';
-// FIX: Use named import for Card from the new UI component path.
 import { Card, CardContent } from '../components/ui/Card';
-// FIX: Use named import for Button from the new UI component path.
 import { Button } from '../components/ui/Button';
-// FIX: Replace deprecated InputField with new UI components.
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
-// FIX: Replace deprecated Modal with new Dialog component.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
 import { TrashIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
 import { useSupabaseData } from '../contexts/SupabaseContext';
@@ -196,7 +193,6 @@ const SetupPage: React.FC = () => {
                 
                 {message && <div className={`p-3 rounded-md text-sm my-4 ${message.startsWith('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{message}</div>}
 
-                {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
                 <Button variant="default" isLoading={plantSaving} onClick={handleSavePlantDetails}>Guardar Configuración</Button>
 
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -227,7 +223,6 @@ const SetupPage: React.FC = () => {
 
                             <div className="flex justify-end space-x-3 pt-4">
                                 <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)} className="w-auto bg-gray-200 text-gray-700 hover:bg-gray-300">Cancelar</Button>
-                                {/* FIX: Changed button variant from "primary" to "default" to match the available variants in the Button component. */}
                                 <Button type="submit" variant="default" className="w-auto">Guardar Equipo</Button>
                             </div>
                         </form>

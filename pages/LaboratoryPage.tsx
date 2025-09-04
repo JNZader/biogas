@@ -4,7 +4,6 @@ import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
 import { useSupabaseData } from '../contexts/SupabaseContext';
@@ -14,6 +13,10 @@ import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { useToast } from '../hooks/use-toast.ts';
 import { useAuth } from '../contexts/AuthContext';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 
 
 type AnalisisLaboratorio = Database['public']['Tables']['analisis_laboratorio']['Row'];
@@ -24,6 +27,23 @@ type DetalleIngreso = Database['public']['Tables']['detalle_ingreso_sustrato']['
 };
 type AnalisisLaboratorioInsert = Database['public']['Tables']['analisis_laboratorio']['Insert'];
 type AnalisisDetalleInsert = Database['public']['Tables']['analisis_laboratorio_detalle']['Insert'];
+
+// --- Co-located Zod Schema ---
+const labAnalysisSchema = z.object({
+    date: z.string().min(1, "La fecha es requerida."),
+    time: z.string().min(1, "La hora es requerida."),
+    detalle_ingreso_sustrato_id: z.string().optional(),
+    equipo_asociado_id: z.string().optional(),
+    sampleType: z.string().min(1, "El tipo de muestra es requerido."),
+    sampleWeight: z.number().nonnegative().optional(),
+    analysisTime: z.number().nonnegative().optional(),
+    sampleTemp: z.number().optional(),
+    observations: z.string().optional(),
+    ph: z.number().min(0).max(14).optional(),
+    totalSolids: z.number().min(0).max(100).optional(),
+});
+type LabAnalysisFormData = z.infer<typeof labAnalysisSchema>;
+
 
 // --- Co-located API Logic ---
 const fetchTiposMuestra = async (): Promise<TipoMuestra[]> => {
@@ -72,28 +92,35 @@ const LaboratoryPage: React.FC = () => {
     const { data: detalleIngresos = [], isLoading: ingresosLoading } = useQuery({ queryKey: ['detalleIngresos'], queryFn: fetchDetalleIngresos });
     const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({ queryKey: ['analisisHistory'], queryFn: fetchAnalisisHistory });
 
+    const form = useForm<LabAnalysisFormData>({
+        resolver: zodResolver(labAnalysisSchema),
+        defaultValues: {
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toTimeString().slice(0, 5),
+            detalle_ingreso_sustrato_id: "",
+            equipo_asociado_id: "",
+            sampleType: "",
+            observations: "",
+        },
+    });
+    
     const mutation = useMutation({
         mutationFn: createAnalisis,
         onSuccess: () => {
             toast({ title: 'Éxito', description: 'Análisis guardado con éxito!' });
             queryClient.invalidateQueries({ queryKey: ['analisisHistory'] });
-            // Consider selective invalidation if performance is an issue
+            form.reset();
         },
         onError: (err: Error) => {
             toast({ title: 'Error', description: `Error al guardar: ${err.message}`, variant: 'destructive' });
         }
     });
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const form = e.currentTarget;
+    const onSubmit = async (data: LabAnalysisFormData) => {
         if (!activePlanta || !publicProfile) {
             toast({ title: 'Error', description: 'Usuario o planta no identificados.', variant: 'destructive' });
             return;
         }
-
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
 
         const detalleIngresoId = data.detalle_ingreso_sustrato_id ? Number(data.detalle_ingreso_sustrato_id) : null;
         const selectedDetalle = detalleIngresoId ? detalleIngresos.find(d => d.id === detalleIngresoId) : null;
@@ -104,23 +131,21 @@ const LaboratoryPage: React.FC = () => {
             fecha_hora_registro: new Date().toISOString(),
             fecha_hora_muestra: `${data.date}T${data.time}:00`,
             detalle_ingreso_sustrato_id: detalleIngresoId,
-            // FIX: Corrected property access from `numero_remito_asociado` to `numero_remito_general`.
             numero_remito_asociado: selectedDetalle?.ingresos_viaje_camion?.numero_remito_general || null,
             equipo_asociado_id: data.equipo_asociado_id ? Number(data.equipo_asociado_id) : null,
             tipo_muestra_id: Number(data.sampleType),
-            peso_muestra_g: data.sampleWeight ? Number(data.sampleWeight) : null,
-            tiempo_analisis_segundos: data.analysisTime ? Number(data.analysisTime) : null,
-            temperatura_muestra_c: data.sampleTemp ? Number(data.sampleTemp) : null,
-            observaciones: data.observations.toString() || null,
+            peso_muestra_g: data.sampleWeight,
+            tiempo_analisis_segundos: data.analysisTime,
+            temperatura_muestra_c: data.sampleTemp,
+            observaciones: data.observations,
         };
 
         const detailData = [
             { parametro: 'pH', valor: data.ph, unidad: null },
             { parametro: 'Sólidos Totales', valor: data.totalSolids, unidad: '%' },
-        ].filter(p => p.valor).map(p => ({ parametro: p.parametro as string, valor: Number(p.valor), unidad: p.unidad }));
+        ].filter(p => p.valor !== undefined && p.valor !== null).map(p => ({ parametro: p.parametro as string, valor: Number(p.valor), unidad: p.unidad }));
         
-        await mutation.mutateAsync({ main: mainData, details: detailData });
-        form.reset();
+        mutation.mutate({ main: mainData, details: detailData });
     };
     
     const sampleTypeFormFields: QuickFormField[] = [
@@ -129,7 +154,6 @@ const LaboratoryPage: React.FC = () => {
         { name: 'descripcion', label: 'Descripción', type: 'textarea' },
     ];
 
-    const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
@@ -142,64 +166,90 @@ const LaboratoryPage: React.FC = () => {
                     <h2 className="text-lg font-semibold text-text-primary mb-1">Análisis de Laboratorio</h2>
                     <p className="text-sm text-text-secondary mb-4">Registrar mediciones de muestras de sustratos.</p>
                     
-                    <form className="space-y-4" onSubmit={handleSubmit}>
+                    <Form {...form}>
+                    <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><Label htmlFor="date">Fecha Muestra</Label><Input id="date" name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} required className={commonInputClasses} /></div>
-                            <div><Label htmlFor="time">Hora Muestra</Label><Input id="time" name="time" type="time" defaultValue={new Date().toTimeString().slice(0, 5)} required className={commonInputClasses}/></div>
+                           <FormField control={form.control} name="date" render={({ field }) => (
+                                <FormItem><FormLabel>Fecha Muestra</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                           )} />
+                           <FormField control={form.control} name="time" render={({ field }) => (
+                                <FormItem><FormLabel>Hora Muestra</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>
+                           )} />
                         </div>
                         
-                        <div>
-                            <Label htmlFor="detalle_ingreso_sustrato_id">Muestra de Ingreso (Opcional)</Label>
-                            <Select id="detalle_ingreso_sustrato_id" name="detalle_ingreso_sustrato_id" className={commonInputClasses} disabled={ingresosLoading}>
-                                <option value="">{ingresosLoading ? 'Cargando ingresos...' : 'Seleccione un ingreso...'}</option>
-                                {detalleIngresos.map(d => (
-                                    <option key={d.id} value={d.id}>
-                                        {`Remito ${d.ingresos_viaje_camion?.numero_remito_general || `ID ${d.id_viaje_ingreso_fk}`} - ${d.sustratos?.nombre || 'Sustrato'}`}
-                                    </option>
-                                ))}
-                            </Select>
-                        </div>
+                        <FormField control={form.control} name="detalle_ingreso_sustrato_id" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Muestra de Ingreso (Opcional)</FormLabel>
+                                <FormControl>
+                                    <Select {...field} disabled={ingresosLoading}>
+                                        <option value="">{ingresosLoading ? 'Cargando ingresos...' : 'Seleccione un ingreso...'}</option>
+                                        {detalleIngresos.map(d => (
+                                            <option key={d.id} value={String(d.id)}>
+                                                {`Remito ${d.ingresos_viaje_camion?.numero_remito_general || `ID ${d.id_viaje_ingreso_fk}`} - ${d.sustratos?.nombre || 'Sustrato'}`}
+                                            </option>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
 
-                         <div>
-                            <Label htmlFor="equipo_asociado_id">Equipo Asociado (Opcional)</Label>
-                            <Select id="equipo_asociado_id" name="equipo_asociado_id" className={commonInputClasses} disabled={dataLoading}>
-                                <option value="">{dataLoading ? 'Cargando...' : 'Seleccione un equipo...'}</option>
-                                {equipos.map(e => (
-                                    <option key={e.id} value={e.id}>{e.nombre_equipo}</option>
-                                ))}
-                            </Select>
-                        </div>
+                         <FormField control={form.control} name="equipo_asociado_id" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Equipo Asociado (Opcional)</FormLabel>
+                                <FormControl>
+                                    <Select {...field} disabled={dataLoading}>
+                                        <option value="">{dataLoading ? 'Cargando...' : 'Seleccione un equipo...'}</option>
+                                        {equipos.map(e => <option key={e.id} value={String(e.id)}>{e.nombre_equipo}</option>)}
+                                    </Select>
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
                         
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <Label htmlFor="sampleType">Tipo de Muestra</Label>
-                                <button type="button" onClick={() => setIsQuickAddOpen(true)} className="text-primary hover:opacity-80 transition-opacity">
-                                    <PlusCircleIcon className="h-5 w-5" />
-                                </button>
-                            </div>
-                            <Select id="sampleType" name="sampleType" required className={commonInputClasses} disabled={tiposLoading}>
-                                <option value="">{tiposLoading ? 'Cargando...' : 'Seleccione tipo'}</option>
-                                {tiposMuestra.map(t => <option key={t.id} value={t.id}>{t.nombre_tipo_muestra}</option>)}
-                            </Select>
-                        </div>
+                        <FormField control={form.control} name="sampleType" render={({ field }) => (
+                            <FormItem>
+                                <div className="flex items-center justify-between">
+                                    <FormLabel>Tipo de Muestra</FormLabel>
+                                    <button type="button" onClick={() => setIsQuickAddOpen(true)} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5" /></button>
+                                </div>
+                                <FormControl>
+                                    <Select {...field} disabled={tiposLoading}>
+                                        <option value="">{tiposLoading ? 'Cargando...' : 'Seleccione tipo'}</option>
+                                        {tiposMuestra.map(t => <option key={t.id} value={String(t.id)}>{t.nombre_tipo_muestra}</option>)}
+                                    </Select>
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-                            <div><Label htmlFor="ph">pH</Label><Input id="ph" name="ph" type="number" min="0" placeholder="7.0" className={commonInputClasses} /></div>
-                            <div><Label htmlFor="sampleWeight">Peso de Muestra (g)</Label><Input id="sampleWeight" name="sampleWeight" type="number" min="0" className={commonInputClasses} /></div>
-                            <div><Label htmlFor="totalSolids">Sólidos Totales (ST) (%)</Label><Input id="totalSolids" name="totalSolids" type="number" min="0" className={commonInputClasses} /></div>
-                            <div><Label htmlFor="analysisTime">Tiempo de Análisis (seg)</Label><Input id="analysisTime" name="analysisTime" type="number" min="0" className={commonInputClasses} /></div>
-                            <div><Label htmlFor="sampleTemp">Temperatura Muestra (°C)</Label><Input id="sampleTemp" name="sampleTemp" type="number" className={commonInputClasses} /></div>
+                            <FormField control={form.control} name="ph" render={({ field }) => (
+                                <FormItem><FormLabel>pH</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="sampleWeight" render={({ field }) => (
+                                <FormItem><FormLabel>Peso de Muestra (g)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="totalSolids" render={({ field }) => (
+                                <FormItem><FormLabel>Sólidos Totales (ST) (%)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="analysisTime" render={({ field }) => (
+                                <FormItem><FormLabel>Tiempo de Análisis (seg)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="sampleTemp" render={({ field }) => (
+                                <FormItem><FormLabel>Temperatura Muestra (°C)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                            )} />
                         </div>
 
-                        <div>
-                            <Label htmlFor="observations">Observaciones</Label>
-                            <Textarea id="observations" name="observations" className={commonInputClasses} />
-                        </div>
+                        <FormField control={form.control} name="observations" render={({ field }) => (
+                            <FormItem><FormLabel>Observaciones</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
 
                         <div className="pt-4">
                             <Button type="submit" variant="default" isLoading={mutation.isPending || dataLoading} disabled={dataLoading}>Guardar Análisis</Button>
                         </div>
                     </form>
+                    </Form>
                 </CardContent>
             </Card>
             <Card>
