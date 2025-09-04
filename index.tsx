@@ -44,58 +44,32 @@ const rootRoute = createRootRoute({
   component: App,
 });
 
-// Create routes using the v1 API
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage });
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage });
-const forgotPasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/forgot-password', component: ForgotPasswordPage });
-const updatePasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/update-password', component: UpdatePasswordPage });
-
-const graphsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/graphs', component: GraphsPage });
-const feedingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/feeding', component: FeedingPage });
-const inputsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/inputs', component: InputsPage });
-const gasQualityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gas-quality', component: GasQualityPage });
-const laboratoryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/laboratory', component: LaboratoryPage });
-const pfqRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pfq', component: PfQPage });
-const environmentRoute = createRoute({ getParentRoute: () => rootRoute, path: '/environment', component: EnvironmentPage });
-const energyRoute = createRoute({ getParentRoute: () => rootRoute, path: '/energy', component: EnergyRegistryPage });
-const chpRoute = createRoute({ getParentRoute: () => rootRoute, path: '/chp', component: ChpControlPage });
-const maintenanceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/maintenance', component: MaintenancePage });
-const stockRoute = createRoute({ getParentRoute: () => rootRoute, path: '/stock', component: StockPage });
-const moreRoute = createRoute({ getParentRoute: () => rootRoute, path: '/more', component: MorePage });
-const profileSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/profile-settings', component: ProfileSettingsPage });
-const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupPage });
-const managementRoute = createRoute({ getParentRoute: () => rootRoute, path: '/management', component: ManagementPage });
-const alarmsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/alarms', component: AlarmsPage });
-const userManagementRoute = createRoute({ getParentRoute: () => rootRoute, path: '/user-management', component: UserManagementPage });
-const changePasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/change-password', component: ChangePasswordPage });
-const errorDetectiveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/error-detective', component: ErrorDetectivePage });
-
 // FIX: The cryptic "strictNullChecks" error from TanStack Router often points to an invalid route tree.
-// Defining the tree separately can sometimes help TypeScript resolve the complex types correctly.
+// Defining the routes inline within `addChildren` can help TypeScript's type inference engine.
 const routeTree = rootRoute.addChildren([
-  indexRoute,
-  loginRoute,
-  forgotPasswordRoute,
-  updatePasswordRoute,
-  graphsRoute,
-  feedingRoute,
-  inputsRoute,
-  gasQualityRoute,
-  laboratoryRoute,
-  pfqRoute,
-  environmentRoute,
-  energyRoute,
-  chpRoute,
-  maintenanceRoute,
-  stockRoute,
-  moreRoute,
-  profileSettingsRoute,
-  setupRoute,
-  managementRoute,
-  alarmsRoute,
-  userManagementRoute,
-  changePasswordRoute,
-  errorDetectiveRoute,
+  createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/forgot-password', component: ForgotPasswordPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/update-password', component: UpdatePasswordPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/graphs', component: GraphsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/feeding', component: FeedingPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/inputs', component: InputsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/gas-quality', component: GasQualityPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/laboratory', component: LaboratoryPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/pfq', component: PfQPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/environment', component: EnvironmentPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/energy', component: EnergyRegistryPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/chp', component: ChpControlPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/maintenance', component: MaintenancePage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/stock', component: StockPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/more', component: MorePage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/profile-settings', component: ProfileSettingsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/management', component: ManagementPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/alarms', component: AlarmsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/user-management', component: UserManagementPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/change-password', component: ChangePasswordPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/error-detective', component: ErrorDetectivePage }),
 ]);
 
 const router = createRouter({

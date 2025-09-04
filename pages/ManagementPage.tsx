@@ -266,9 +266,9 @@ const ManagementPage: React.FC = () => {
 
     const getItemName = (item: ManagedEntity | null): string => {
         if (!item) return '';
-        if ('nombre' in item) return item.nombre;
-        if ('patente' in item) return item.patente;
-        if ('nombre_equipo' in item) return item.nombre_equipo;
+        if ('nombre' in item && item.nombre) return item.nombre;
+        if ('patente' in item && item.patente) return item.patente;
+        if ('nombre_equipo' in item && item.nombre_equipo) return item.nombre_equipo;
         return `ítem con ID ${(item as { id: number }).id}`;
     };
 
@@ -397,18 +397,18 @@ const ManagementPage: React.FC = () => {
             case 'sustratos':
                 return (
                     <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={'categoria' in currentItem ? currentItem.categoria : ''} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="descripcion">Descripción</Label><Textarea id="descripcion" name="descripcion" defaultValue={'descripcion' in currentItem ? currentItem.descripcion : ''} className={commonInputClasses} /></div>
+                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem && 'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={currentItem && 'categoria' in currentItem ? currentItem.categoria ?? '' : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="descripcion">Descripción</Label><Textarea id="descripcion" name="descripcion" defaultValue={currentItem && 'descripcion' in currentItem ? currentItem.descripcion ?? '' : ''} className={commonInputClasses} /></div>
                     </>
                 );
             case 'proveedores':
             case 'transportistas':
                 return (
                      <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="razon_social">Razón Social</Label><Input id="razon_social" name="razon_social" type="text" defaultValue={'razon_social' in currentItem ? currentItem.razon_social : ''} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="cuit">CUIT</Label><Input id="cuit" name="cuit" type="text" defaultValue={'cuit' in currentItem ? currentItem.cuit : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem && 'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="razon_social">Razón Social</Label><Input id="razon_social" name="razon_social" type="text" defaultValue={currentItem && 'razon_social' in currentItem ? currentItem.razon_social ?? '' : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="cuit">CUIT</Label><Input id="cuit" name="cuit" type="text" defaultValue={currentItem && 'cuit' in currentItem ? currentItem.cuit ?? '' : ''} className={commonInputClasses}/></div>
                     </>
                 );
             case 'camiones':
@@ -484,19 +484,19 @@ const ManagementPage: React.FC = () => {
              case 'lugaresDescarga':
                 return (
                      <>
-                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="tipo">Tipo</Label><Input id="tipo" name="tipo" type="text" defaultValue={'tipo' in currentItem ? currentItem.tipo : ''} placeholder="Ej: Playa, Tolva, Tanque" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="capacidad_m3">Capacidad (m³)</Label><Input id="capacidad_m3" name="capacidad_m3" type="number" min="0" defaultValue={'capacidad_m3' in currentItem ? currentItem.capacidad_m3 : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="nombre">Nombre</Label><Input id="nombre" name="nombre" type="text" defaultValue={currentItem && 'nombre' in currentItem ? currentItem.nombre : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="tipo">Tipo</Label><Input id="tipo" name="tipo" type="text" defaultValue={currentItem && 'tipo' in currentItem ? currentItem.tipo ?? '' : ''} placeholder="Ej: Playa, Tolva, Tanque" className={commonInputClasses}/></div>
+                        <div><Label htmlFor="capacidad_m3">Capacidad (m³)</Label><Input id="capacidad_m3" name="capacidad_m3" type="number" min="0" defaultValue={currentItem && 'capacidad_m3' in currentItem ? currentItem.capacidad_m3 ?? '' : ''} className={commonInputClasses}/></div>
                     </>
                 );
             case 'equipos':
                 return (
                     <>
-                        <div><Label htmlFor="nombre_equipo">Nombre del Equipo</Label><Input id="nombre_equipo" name="nombre_equipo" type="text" defaultValue={'nombre_equipo' in currentItem ? currentItem.nombre_equipo : ''} required className={commonInputClasses}/></div>
-                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={'categoria' in currentItem ? currentItem.categoria : ''} placeholder="Ej: Bomba, Agitador" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="codigo_equipo">Código / Tag</Label><Input id="codigo_equipo" name="codigo_equipo" type="text" defaultValue={'codigo_equipo' in currentItem ? currentItem.codigo_equipo : ''} placeholder="Ej: P-001" className={commonInputClasses}/></div>
-                        <div><Label htmlFor="marca">Marca</Label><Input id="marca" name="marca" type="text" defaultValue={'marca' in currentItem ? currentItem.marca : ''} className={commonInputClasses}/></div>
-                        <div><Label htmlFor="modelo">Modelo</Label><Input id="modelo" name="modelo" type="text" defaultValue={'modelo' in currentItem ? currentItem.modelo : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="nombre_equipo">Nombre del Equipo</Label><Input id="nombre_equipo" name="nombre_equipo" type="text" defaultValue={currentItem && 'nombre_equipo' in currentItem ? currentItem.nombre_equipo : ''} required className={commonInputClasses}/></div>
+                        <div><Label htmlFor="categoria">Categoría</Label><Input id="categoria" name="categoria" type="text" defaultValue={currentItem && 'categoria' in currentItem ? currentItem.categoria ?? '' : ''} placeholder="Ej: Bomba, Agitador" className={commonInputClasses}/></div>
+                        <div><Label htmlFor="codigo_equipo">Código / Tag</Label><Input id="codigo_equipo" name="codigo_equipo" type="text" defaultValue={currentItem && 'codigo_equipo' in currentItem ? currentItem.codigo_equipo ?? '' : ''} placeholder="Ej: P-001" className={commonInputClasses}/></div>
+                        <div><Label htmlFor="marca">Marca</Label><Input id="marca" name="marca" type="text" defaultValue={currentItem && 'marca' in currentItem ? currentItem.marca ?? '' : ''} className={commonInputClasses}/></div>
+                        <div><Label htmlFor="modelo">Modelo</Label><Input id="modelo" name="modelo" type="text" defaultValue={currentItem && 'modelo' in currentItem ? currentItem.modelo ?? '' : ''} className={commonInputClasses}/></div>
                     </>
                 );
             default: return null;
