@@ -39,6 +39,8 @@ const Toast = React.forwardRef<HTMLLIElement, ToastProps>(
     return (
       <li
         ref={ref}
+        role="status"
+        aria-live="polite"
         className={cn(toastVariants[variant], "pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all", className)}
         {...props}
       />

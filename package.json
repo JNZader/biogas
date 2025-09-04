@@ -28,7 +28,8 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@hookform/resolvers": "^5.2.1",
     "tanstack": "^1.0.3",
-    "@playwright/test": "^1.55.0"
+    "@playwright/test": "^1.55.0",
+    "@axe-core/playwright": "^4.9.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
