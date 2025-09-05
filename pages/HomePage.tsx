@@ -379,8 +379,7 @@ const HomePage: React.FC = () => {
                                 <YAxis stroke={themeColors.textSecondary} fontSize={12} />
                                 <Tooltip
                                     contentStyle={{ 
-                                        backgroundColor: 'rgba(var(--color-surface), 0.8)',
-                                        backdropFilter: 'blur(5px)',
+                                        backgroundColor: 'rgb(var(--color-surface))',
                                         border: '1px solid rgb(var(--color-border))',
                                         borderRadius: '0.5rem',
                                         color: 'rgb(var(--color-text-primary))',
