@@ -1,7 +1,6 @@
+/// <reference types="node" />
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
-// FIX: Import 'process' to provide correct Node.js type definitions and resolve the error on 'process.cwd()'.
-import process from 'process';
 
 export default defineConfig(({ mode }) => {
     // Carga las variables de entorno desde el archivo .env en la raíz del proyecto

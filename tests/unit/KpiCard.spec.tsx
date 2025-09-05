@@ -12,8 +12,9 @@ import type { KpiCardProps } from '../../pages/HomePage';
 import { BoltIcon } from '@heroicons/react/24/outline';
 
 // FIX: Mock the Link component from TanStack Router to prevent errors in a test environment that lacks a router context. This mock renders a simple anchor tag in its place.
-vi.mock('@tanstack/react-router', async (importOriginal) => {
-    const original = await importOriginal<typeof import('@tanstack/react-router')>();
+// FIX: Changed the mock factory to use `vi.importActual` to resolve the "Untyped function calls may not accept type arguments" error.
+vi.mock('@tanstack/react-router', async () => {
+    const original = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router');
     return {
         ...original,
         Link: ({ to, children, ...props }: any) => <a href={to} {...props}>{children}</a>,
