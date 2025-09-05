@@ -32,26 +32,26 @@ describe('KpiCard', () => {
   it('renders all the provided information', () => {
     render(<KpiCard {...baseProps} />);
     
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(screen.getByText('Test KPI')).not.toBeNull();
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(screen.getByText('1,234')).not.toBeNull();
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(screen.getByText('kWh')).not.toBeNull();
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(screen.getByTestId('bolt-icon')).not.toBeNull();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(screen.getByText('Test KPI')).toBeDefined();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(screen.getByText('1,234')).toBeDefined();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(screen.getByText('kWh')).toBeDefined();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(screen.getByTestId('bolt-icon')).toBeDefined();
   });
 
   it('shows a positive trend with an up arrow', () => {
     render(<KpiCard {...baseProps} trend={5.5} />);
 
     const trendElement = screen.getByText(/5.5% vs last period/);
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(trendElement).not.toBeNull();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(trendElement).toBeDefined();
     // FIX: Replaced toHaveClass with a className.toContain check to resolve TypeScript errors with jest-dom matchers in Vitest.
     expect(trendElement.className).toContain('text-success');
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(screen.getByTestId('arrow-up-icon')).not.toBeNull();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(screen.getByTestId('arrow-up-icon')).toBeDefined();
     // FIX: Replaced not.toBeInTheDocument with toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
     expect(screen.queryByTestId('arrow-down-icon')).toBeNull();
   });
@@ -60,12 +60,12 @@ describe('KpiCard', () => {
     render(<KpiCard {...baseProps} trend={-2.1} />);
     
     const trendElement = screen.getByText(/2.1% vs last period/);
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(trendElement).not.toBeNull();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(trendElement).toBeDefined();
     // FIX: Replaced toHaveClass with a className.toContain check to resolve TypeScript errors with jest-dom matchers in Vitest.
     expect(trendElement.className).toContain('text-error');
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(screen.getByTestId('arrow-down-icon')).not.toBeNull();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(screen.getByTestId('arrow-down-icon')).toBeDefined();
     // FIX: Replaced not.toBeInTheDocument with toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
     expect(screen.queryByTestId('arrow-up-icon')).toBeNull();
   });
@@ -74,12 +74,12 @@ describe('KpiCard', () => {
     render(<KpiCard {...baseProps} trend={0} />);
     
     const trendElement = screen.getByText(/0% vs last period/);
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(trendElement).not.toBeNull();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(trendElement).toBeDefined();
     // FIX: Replaced toHaveClass with a className.toContain check to resolve TypeScript errors with jest-dom matchers in Vitest.
     expect(trendElement.className).toContain('text-success');
-    // FIX: Replaced toBeInTheDocument with not.toBeNull to resolve TypeScript errors with jest-dom matchers in Vitest.
-    expect(screen.getByTestId('arrow-up-icon')).not.toBeNull();
+    // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
+    expect(screen.getByTestId('arrow-up-icon')).toBeDefined();
   });
 
   it('does not render unit if not provided', () => {

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useRouterState } from '@tanstack/react-router';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
-import { Input } from '../components/ui/Input';
-import { Label } from '../components/ui/Label';
-import { Textarea } from '../components/ui/Textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/Dialog';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { PlusCircleIcon, ClipboardDocumentCheckIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../components/EmptyState';
@@ -15,7 +16,11 @@ import QuickAddModal, { FormField as QuickFormField } from '../components/QuickA
 import { useToast } from '../hooks/use-toast.ts';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { exportToCsv } from '../lib/utils';
-import { ChecklistItemId } from '../types/branded';
+import { ChecklistItemId, EquipoId } from '../types/branded';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
+import { Input } from '../components/ui/Input';
+import { Select } from '../components/ui/Select';
+import { Textarea } from '../components/ui/Textarea';
 
 
 type ChecklistItem = Database['public']['Tables']['checklist_items']['Row'];
@@ -29,6 +34,15 @@ interface EnrichedMantenimientoEvento extends MantenimientoEvento {
     equipos?: { nombre_equipo: string } | null;
     tipos_mantenimiento?: { nombre_tipo: string } | null;
 }
+
+const taskSchema = z.object({
+    equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
+    tipo_mantenimiento_id: z.string().min(1, "Debe seleccionar un tipo."),
+    descripcion_problema: z.string().min(5, "La descripción es muy corta."),
+    fecha_inicio: z.string().min(1, "La fecha de inicio es requerida."),
+    fecha_planificada: z.string().optional(),
+});
+type TaskFormData = z.infer<typeof taskSchema>;
 
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
@@ -212,15 +226,30 @@ const Tasks: React.FC = () => {
     const [historyError, setHistoryError] = useState<string | null>(null);
     
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [formLoading, setFormLoading] = useState(false);
-    const [formMessage, setFormMessage] = useState('');
-
+    
     const [quickAddState, setQuickAddState] = useState<{
         isOpen: boolean;
         entity: string;
         tableName: 'equipos' | 'tipos_mantenimiento';
         fields: QuickFormField[];
     } | null>(null);
+
+    const form = useForm<TaskFormData>({
+        resolver: zodResolver(taskSchema),
+        defaultValues: {
+            fecha_inicio: new Date().toISOString().split('T')[0],
+        },
+    });
+
+    // FIX: Correctly select and type the prefill data from the router state.
+    const prefillData = useRouterState({ select: s => (s.location.state as { prefillTask?: any } | undefined)?.prefillTask });
+
+    useEffect(() => {
+        if (prefillData?.equipo_id) {
+            handleOpenModal(prefillData);
+        }
+    }, [prefillData]);
+
 
     const fetchTasks = useCallback(async () => {
         setLoading(true);
@@ -290,8 +319,14 @@ const Tasks: React.FC = () => {
         }
     };
 
-    const handleOpenModal = () => {
-        setFormMessage('');
+    const handleOpenModal = (initialData: any = null) => {
+        form.reset({
+            equipo_id: initialData?.equipo_id?.toString() || '',
+            descripcion_problema: initialData?.descripcion_problema || '',
+            fecha_inicio: new Date().toISOString().split('T')[0],
+            fecha_planificada: '',
+            tipo_mantenimiento_id: '',
+        });
         setIsModalOpen(true);
     };
 
@@ -299,36 +334,27 @@ const Tasks: React.FC = () => {
         setIsModalOpen(false);
     };
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setFormLoading(true);
-        setFormMessage('');
-
-        const formData = new FormData(e.currentTarget);
-        const data = {
-            equipo_id: Number(formData.get('equipo_id')),
-            tipo_mantenimiento_id: Number(formData.get('tipo_mantenimiento_id')),
-            descripcion_problema: formData.get('descripcion_problema') as string,
-            fecha_inicio: formData.get('fecha_inicio') as string,
-            fecha_planificada: (formData.get('fecha_planificada') as string) || null,
+    const onSubmit = async (data: TaskFormData) => {
+        const dataToInsert = {
+            equipo_id: Number(data.equipo_id),
+            tipo_mantenimiento_id: Number(data.tipo_mantenimiento_id),
+            descripcion_problema: data.descripcion_problema,
+            fecha_inicio: data.fecha_inicio,
+            fecha_planificada: data.fecha_planificada || null,
             usuario_responsable_id: 1, // Hardcoded for demo
             planta_id: 1, // Hardcoded for demo
         };
 
         try {
-            const { error } = await supabase.from('mantenimiento_eventos').insert(data);
+            const { error } = await supabase.from('mantenimiento_eventos').insert(dataToInsert);
             if (error) throw error;
             
-            setFormMessage('Tarea creada con éxito!');
+            toast({ title: 'Éxito', description: 'Tarea creada con éxito!' });
             await fetchTasks();
-            setTimeout(() => { // Close modal after a short delay to show success message
-                handleCloseModal();
-            }, 1000);
+            handleCloseModal();
 
         } catch(err: any) {
-            setFormMessage(`Error: ${err.message}`);
-        } finally {
-            setFormLoading(false);
+             toast({ title: 'Error', description: err.message, variant: 'destructive' });
         }
     };
     
@@ -362,8 +388,6 @@ const Tasks: React.FC = () => {
         exportToCsv('historial_mantenimiento.csv', dataToExport);
     };
 
-    const commonSelectClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
-    const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
@@ -384,7 +408,7 @@ const Tasks: React.FC = () => {
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-text-primary">Tareas de Mantenimiento Pendientes</h2>
-                         <Button onClick={handleOpenModal} variant="secondary" className="w-auto px-4 py-2 text-sm flex items-center gap-2">
+                         <Button onClick={() => handleOpenModal()} variant="secondary" className="w-auto px-4 py-2 text-sm flex items-center gap-2">
                             <PlusCircleIcon className="h-5 w-5" />
                             Crear Tarea
                         </Button>
@@ -394,7 +418,7 @@ const Tasks: React.FC = () => {
                             icon={<ClipboardDocumentCheckIcon className="mx-auto h-12 w-12" />}
                             title="Todo en orden"
                             message="No hay tareas de mantenimiento pendientes en este momento."
-                            action={<Button onClick={handleOpenModal} variant="secondary" className="w-auto mt-4 px-4 py-2 text-sm">Crear una Tarea</Button>}
+                            action={<Button onClick={() => handleOpenModal()} variant="secondary" className="w-auto mt-4 px-4 py-2 text-sm">Crear una Tarea</Button>}
                         />
                     ) : (
                         <div className="space-y-4">
@@ -478,64 +502,49 @@ const Tasks: React.FC = () => {
                     <DialogHeader>
                         <DialogTitle>Crear Nueva Tarea de Mantenimiento</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 px-6 pb-6">
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <Label htmlFor="equipo_id">Equipo</Label>
-                                <button type="button" onClick={() => handleOpenQuickAdd('equipo')} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
+                     <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 px-6 pb-6">
+                            <FormField control={form.control} name="equipo_id" render={({ field }) => (
+                                <FormItem>
+                                    <div className="flex items-center justify-between">
+                                        <FormLabel>Equipo</FormLabel>
+                                        <button type="button" onClick={() => handleOpenQuickAdd('equipo')} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
+                                    </div>
+                                    <FormControl>
+                                        <Select {...field}><option value="">Seleccione equipo</option>{equipos.map(e => <option key={e.id} value={String(e.id)}>{e.nombre_equipo}</option>)}</Select>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                             <FormField control={form.control} name="tipo_mantenimiento_id" render={({ field }) => (
+                                <FormItem>
+                                    <div className="flex items-center justify-between">
+                                        <FormLabel>Tipo de Mantenimiento</FormLabel>
+                                        <button type="button" onClick={() => handleOpenQuickAdd('tipoMantenimiento')} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
+                                    </div>
+                                    <FormControl>
+                                        <Select {...field}><option value="">Seleccione tipo</option>{tiposMantenimiento.map(t => <option key={t.id} value={String(t.id)}>{t.nombre_tipo}</option>)}</Select>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="descripcion_problema" render={({ field }) => (
+                                <FormItem><FormLabel>Descripción del Problema/Tarea</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField control={form.control} name="fecha_inicio" render={({ field }) => (
+                                    <FormItem><FormLabel>Fecha de Inicio</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                                )} />
+                                <FormField control={form.control} name="fecha_planificada" render={({ field }) => (
+                                    <FormItem><FormLabel>Fecha Planificada (Opcional)</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                                )} />
                             </div>
-                            <select
-                                id="equipo_id"
-                                name="equipo_id"
-                                required
-                                className={commonSelectClasses}
-                            >
-                                <option value="">Seleccione un equipo</option>
-                                {equipos.map(e => <option key={e.id} value={e.id}>{e.nombre_equipo}</option>)}
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <div className="flex items-center justify-between">
-                                <Label htmlFor="tipo_mantenimiento_id">Tipo de Mantenimiento</Label>
-                                <button type="button" onClick={() => handleOpenQuickAdd('tipoMantenimiento')} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
-                            </div>
-                            <select
-                                id="tipo_mantenimiento_id"
-                                name="tipo_mantenimiento_id"
-                                required
-                                className={commonSelectClasses}
-                            >
-                                <option value="">Seleccione un tipo</option>
-                                {tiposMantenimiento.map(t => <option key={t.id} value={t.id}>{t.nombre_tipo}</option>)}
-                            </select>
-                        </div>
-
-                        <div>
-                            <Label htmlFor="descripcion_problema">Descripción del Problema/Tarea</Label>
-                            <Textarea id="descripcion_problema" name="descripcion_problema" required className={commonInputClasses} />
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="fecha_inicio">Fecha de Inicio</Label>
-                                <Input id="fecha_inicio" name="fecha_inicio" type="date" defaultValue={new Date().toISOString().split('T')[0]} required className={commonInputClasses}/>
-                            </div>
-                            <div>
-                                <Label htmlFor="fecha_planificada">Fecha Planificada (Opcional)</Label>
-                                <Input id="fecha_planificada" name="fecha_planificada" type="date" className={commonInputClasses}/>
-                            </div>
-                        </div>
-
-                        {formMessage && <div className={`p-3 rounded-md text-sm ${formMessage.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{formMessage}</div>}
-
-                        <div className="flex justify-end space-x-3 pt-4">
-                            <Button type="button" onClick={handleCloseModal} className="w-auto bg-border text-text-primary hover:bg-border/80">Cancelar</Button>
-                            <Button type="submit" variant="default" className="w-auto" isLoading={formLoading}>
-                                Guardar Tarea
-                            </Button>
-                        </div>
-                    </form>
+                            <DialogFooter className="pt-4">
+                                <Button type="button" variant="outline" onClick={handleCloseModal}>Cancelar</Button>
+                                <Button type="submit" variant="default" isLoading={form.formState.isSubmitting}>Guardar Tarea</Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 

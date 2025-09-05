@@ -71,7 +71,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: '/user-management', component: UserManagementPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/change-password', component: ChangePasswordPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/error-detective', component: ErrorDetectivePage }),
-]);
+] as const);
 
 const router = createRouter({
   routeTree,

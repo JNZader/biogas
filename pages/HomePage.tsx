@@ -2,8 +2,12 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
+import { Switch } from '../components/ui/Switch';
+import { Label } from '../components/ui/Label';
+import { Button } from '../components/ui/Button';
 import Page from '../components/Page';
-import { BoltIcon, FireIcon, BeakerIcon, AdjustmentsHorizontalIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
+import { BoltIcon, FireIcon, BeakerIcon, AdjustmentsHorizontalIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon, ArrowUpIcon, ArrowDownIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 import { useThemeColors } from '../stores/useThemeColors';
 import { supabase } from '../services/supabaseClient';
 import { format } from 'date-fns';
@@ -11,6 +15,7 @@ import { es } from 'date-fns/locale/es';
 import { cn } from '../lib/utils';
 import { useStore as useZustandStore } from 'zustand';
 import { customAlertsStore } from '../stores/customAlertsStore';
+import { useDashboardStore } from '../stores/dashboardStore';
 
 // --- Co-located API Logic ---
 const fetchDashboardData = async (timeRange: number) => {
@@ -145,11 +150,40 @@ const TimeRangeButton: React.FC<{
     </button>
 );
 
+const CustomizeDashboardModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, onClose }) => {
+    const { kpis, toggleKpi } = useDashboardStore();
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Personalizar Dashboard</DialogTitle>
+                </DialogHeader>
+                <div className="p-6 pt-0 space-y-4">
+                    <p className="text-sm text-text-secondary">Seleccione los indicadores clave que desea ver en su dashboard.</p>
+                    {kpis.map((kpi) => (
+                        <div key={kpi.id} className="flex items-center justify-between p-2 rounded-md bg-background">
+                            <Label htmlFor={`kpi-toggle-${kpi.id}`}>{kpi.title}</Label>
+                            <Switch
+                                id={`kpi-toggle-${kpi.id}`}
+                                checked={kpi.isVisible}
+                                onCheckedChange={() => toggleKpi(kpi.id)}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
 
 const HomePage: React.FC = () => {
   const themeColors = useThemeColors();
   const [timeRange, setTimeRange] = useState<number>(7);
   const { evaluateAlerts } = useZustandStore(customAlertsStore);
+  const { kpis: dashboardKpis } = useDashboardStore();
+  const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboardData', timeRange],
@@ -167,12 +201,16 @@ const HomePage: React.FC = () => {
 
   const { kpiData, chartData } = data || { kpiData: null, chartData: [] };
 
-  const kpis = useMemo<KpiCardProps[]>(() => [
-    { title: 'Generación Eléctrica', value: kpiData?.generacion || '...', unit: 'MWh', trend: 2.5, icon: <BoltIcon className="h-6 w-6" /> },
-    { title: 'Producción Biogás', value: kpiData?.biogas || '...', unit: 'kg/d', trend: -1.2, icon: <FireIcon className="h-6 w-6" /> },
-    { title: 'FOS/TAC', value: kpiData?.fosTac || '...', trend: 5.0, icon: <BeakerIcon className="h-6 w-6" /> },
-    { title: 'Calidad Gas (CH4)', value: kpiData?.ch4 || '...', unit: '%', trend: 0.5, icon: <AdjustmentsHorizontalIcon className="h-6 w-6" /> },
-  ], [kpiData]);
+  const kpiDefinitions = useMemo<Record<string, KpiCardProps>>(() => ({
+    generacion: { title: 'Generación Eléctrica', value: kpiData?.generacion || '...', unit: 'MWh', trend: 2.5, icon: <BoltIcon className="h-6 w-6" /> },
+    biogas: { title: 'Producción Biogás', value: kpiData?.biogas || '...', unit: 'kg/d', trend: -1.2, icon: <FireIcon className="h-6 w-6" /> },
+    fosTac: { title: 'FOS/TAC', value: kpiData?.fosTac || '...', trend: 5.0, icon: <BeakerIcon className="h-6 w-6" /> },
+    ch4: { title: 'Calidad Gas (CH4)', value: kpiData?.ch4 || '...', unit: '%', trend: 0.5, icon: <AdjustmentsHorizontalIcon className="h-6 w-6" /> },
+  }), [kpiData]);
+
+  const visibleKpis = useMemo(() => 
+    dashboardKpis.filter(k => k.isVisible).map(k => kpiDefinitions[k.id]),
+  [dashboardKpis, kpiDefinitions]);
 
   const plantStatus: PlantStatus = useMemo(() => {
     if (!kpiData) return 'warning';
@@ -214,7 +252,7 @@ const HomePage: React.FC = () => {
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {kpis.map(kpi => <KpiCard key={kpi.title} {...kpi} />)}
+            {visibleKpis.map(kpi => <KpiCard key={kpi.title} {...kpi} />)}
         </div>
 
         <div>
@@ -222,10 +260,13 @@ const HomePage: React.FC = () => {
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                       <CardTitle>Producción Diaria</CardTitle>
-                      <div className="flex space-x-1 bg-background p-1 rounded-lg">
+                      <div className="flex items-center space-x-1 bg-background p-1 rounded-lg">
                           <TimeRangeButton range={7} activeRange={timeRange} setRange={setTimeRange}>7D</TimeRangeButton>
                           <TimeRangeButton range={14} activeRange={timeRange} setRange={setTimeRange}>14D</TimeRangeButton>
                           <TimeRangeButton range={30} activeRange={timeRange} setRange={setTimeRange}>30D</TimeRangeButton>
+                          <Button variant="ghost" size="icon" onClick={() => setIsCustomizeModalOpen(true)} className="ml-2">
+                              <Cog6ToothIcon className="h-5 w-5 text-text-secondary" />
+                          </Button>
                       </div>
                     </div>
                 </CardHeader>
@@ -255,6 +296,7 @@ const HomePage: React.FC = () => {
             </Card>
         </div>
       </div>
+      <CustomizeDashboardModal isOpen={isCustomizeModalOpen} onClose={() => setIsCustomizeModalOpen(false)} />
     </Page>
   );
 };

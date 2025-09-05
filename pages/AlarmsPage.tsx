@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@zodix/zod';
 import { z } from 'zod';
 import { useStore as useZustandStore } from 'zustand';
+import { useNavigate } from '@tanstack/react-router';
 
 import Page from '../components/Page';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -27,7 +28,8 @@ import {
     ArrowDownIcon, 
     ChevronUpDownIcon, 
     TrashIcon,
-    ArrowDownTrayIcon
+    ArrowDownTrayIcon,
+    WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline';
 
 // --- Type Definitions ---
@@ -46,6 +48,7 @@ interface AlarmDisplayItem {
     severity: Severity;
     isResolved: boolean;
     isCustom: boolean;
+    equipoId?: number | null;
 }
 
 type SortKey = 'timestamp' | 'alarmType' | 'severity';
@@ -219,6 +222,7 @@ const CustomAlertsConfig: React.FC = () => {
 const AlarmsPage: React.FC = () => {
     const { data: systemAlarms, isLoading, error } = useQuery({ queryKey: ['alarmsHistory'], queryFn: fetchAlarms });
     const { triggeredAlerts } = useZustandStore(customAlertsStore);
+    const navigate = useNavigate();
 
     const [severityFilter, setSeverityFilter] = useState<string>('all');
     const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -234,6 +238,7 @@ const AlarmsPage: React.FC = () => {
             severity: alarm.severidad || 'info',
             isResolved: alarm.resuelta ?? false,
             isCustom: false,
+            equipoId: alarm.equipo_id,
         }));
 
         const normalizedCustomAlerts: AlarmDisplayItem[] = triggeredAlerts.map(alert => ({
@@ -285,6 +290,19 @@ const AlarmsPage: React.FC = () => {
             key,
             direction: prev.key === key && prev.direction === 'descending' ? 'ascending' : 'descending'
         }));
+    };
+    
+    const handleCreateTask = (alarm: AlarmDisplayItem) => {
+        navigate({
+            to: '/maintenance',
+            // FIX: Cast the state object to `any` to bypass strict type checking for router state.
+            state: {
+                prefillTask: {
+                    equipo_id: alarm.equipoId,
+                    descripcion_problema: `Alarma: ${alarm.alarmType} - ${alarm.description || 'Revisar equipo.'}`
+                }
+            } as any
+        });
     };
 
     const getSeverityBadgeClass = (severity: Severity) => ({
@@ -359,6 +377,7 @@ const AlarmsPage: React.FC = () => {
                                         <SortableHeader columnKey="alarmType" title="Tipo de Alarma" sortConfig={sortConfig} onSort={handleSort}/>
                                         <SortableHeader columnKey="severity" title="Severidad" sortConfig={sortConfig} onSort={handleSort}/>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Estado</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-surface divide-y divide-border">
@@ -380,6 +399,18 @@ const AlarmsPage: React.FC = () => {
                                                 <Badge className={alarm.isResolved ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning'}>
                                                     {alarm.isResolved ? 'Resuelta' : 'Pendiente'}
                                                 </Badge>
+                                            </td>
+                                             <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    onClick={() => handleCreateTask(alarm)}
+                                                    disabled={!alarm.equipoId}
+                                                    aria-label="Crear tarea de mantenimiento"
+                                                >
+                                                    <WrenchScrewdriverIcon className="h-4 w-4 mr-1"/>
+                                                    Crear Tarea
+                                                </Button>
                                             </td>
                                         </tr>
                                     ))}

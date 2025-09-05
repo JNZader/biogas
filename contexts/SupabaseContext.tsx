@@ -5,7 +5,8 @@
  * This approach reduces redundant data fetching and simplifies data access in components.
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 import { useAuth } from './AuthContext.tsx';
@@ -15,47 +16,56 @@ import { useAuth } from './AuthContext.tsx';
 const fetchSustratos = async () => {
     const { data, error } = await supabase.from('sustratos').select('*').order('nombre');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchProveedores = async () => {
     const { data, error } = await supabase.from('empresa').select('*').eq('tipo_empresa', 'proveedor').order('nombre');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchTransportistas = async () => {
     const { data, error } = await supabase.from('empresa').select('*').eq('tipo_empresa', 'transportista').order('nombre');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchCamiones = async () => {
     const { data, error } = await supabase.from('camiones').select('*').order('patente');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchLugaresDescarga = async () => {
     const { data, error } = await supabase.from('lugares_descarga').select('*').order('nombre');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchEquipos = async () => {
     const { data, error } = await supabase.from('equipos').select('*').order('nombre_equipo');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchTiposMantenimiento = async () => {
     const { data, error } = await supabase.from('tipos_mantenimiento').select('*').order('nombre_tipo');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchSubsistemas = async () => {
     const { data, error } = await supabase.from('subsistemas').select('*').order('nombre_subsistema');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 const fetchModulos = async () => {
     const { data, error } = await supabase.from('modulos').select('*').order('nombre');
     if (error) throw error;
-    return data;
+    // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
+    return data || [];
 };
 
 // --- Context Definition ---
@@ -93,75 +103,39 @@ const SupabaseDataContext = createContext<SupabaseDataContextType | undefined>(u
  * @param {React.ReactNode} props.children - The child components to be rendered within the provider.
  */
 export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { user, activePlanta, loading: authLoading } = useAuth();
-    const [sustratos, setSustratos] = useState<Sustrato[]>([]);
-    const [proveedores, setProveedores] = useState<Empresa[]>([]);
-    const [transportistas, setTransportistas] = useState<Empresa[]>([]);
-    const [camiones, setCamiones] = useState<Camion[]>([]);
-    const [lugaresDescarga, setLugaresDescarga] = useState<LugarDescarga[]>([]);
-    const [equipos, setEquipos] = useState<Equipo[]>([]);
-    const [tiposMantenimiento, setTiposMantenimiento] = useState<TipoMantenimiento[]>([]);
-    const [subsistemas, setSubsistemas] = useState<Subsistema[]>([]);
-    const [modulos, setModulos] = useState<Modulo[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { activePlanta, loading: authLoading } = useAuth();
+    const queryClient = useQueryClient();
+    const isEnabled = !!activePlanta; // Enable queries only when a plant is active
 
-    const fetchData = useCallback(async () => {
-        if (!activePlanta) {
-            setLoading(false);
-            return;
-        };
+    const useSharedQuery = <T,>(key: string, fetcher: () => Promise<T[]>) => {
+        return useQuery({
+            queryKey: [key, activePlanta?.id],
+            queryFn: fetcher,
+            enabled: isEnabled,
+            staleTime: 5 * 60 * 1000, // 5 minutes
+            refetchOnWindowFocus: false,
+        });
+    };
 
-        setLoading(true);
-        setError(null);
-        try {
-            // With RLS in place, we don't need to add .eq('planta_id', activePlanta.id) to every query.
-            // Supabase will handle the filtering on the backend based on the authenticated user.
-            // This simplifies the frontend code significantly.
-            const [
-                sustratosData,
-                proveedoresData,
-                camionesData,
-                lugaresDescargaData,
-                equiposData,
-                tiposMantenimientoData,
-                transportistasData,
-                subsistemasData,
-                modulosData,
-            ] = await Promise.all([
-                fetchSustratos(),
-                fetchProveedores(),
-                fetchCamiones(),
-                fetchLugaresDescarga(),
-                fetchEquipos(),
-                fetchTiposMantenimiento(),
-                fetchTransportistas(),
-                fetchSubsistemas(),
-                fetchModulos(),
-            ]);
+    const { data: sustratos = [], isLoading: sustratosLoading, error: sustratosError } = useSharedQuery('sustratos', fetchSustratos);
+    const { data: proveedores = [], isLoading: proveedoresLoading, error: proveedoresError } = useSharedQuery('proveedores', fetchProveedores);
+    const { data: transportistas = [], isLoading: transportistasLoading, error: transportistasError } = useSharedQuery('transportistas', fetchTransportistas);
+    const { data: camiones = [], isLoading: camionesLoading, error: camionesError } = useSharedQuery('camiones', fetchCamiones);
+    const { data: lugaresDescarga = [], isLoading: lugaresDescargaLoading, error: lugaresDescargaError } = useSharedQuery('lugaresDescarga', fetchLugaresDescarga);
+    const { data: equipos = [], isLoading: equiposLoading, error: equiposError } = useSharedQuery('equipos', fetchEquipos);
+    const { data: tiposMantenimiento = [], isLoading: tiposMantenimientoLoading, error: tiposMantenimientoError } = useSharedQuery('tiposMantenimiento', fetchTiposMantenimiento);
+    const { data: subsistemas = [], isLoading: subsistemasLoading, error: subsistemasError } = useSharedQuery('subsistemas', fetchSubsistemas);
+    const { data: modulos = [], isLoading: modulosLoading, error: modulosError } = useSharedQuery('modulos', fetchModulos);
 
-            setSustratos(sustratosData);
-            setProveedores(proveedoresData);
-            setCamiones(camionesData);
-            setLugaresDescarga(lugaresDescargaData);
-            setEquipos(equiposData);
-            setTiposMantenimiento(tiposMantenimientoData);
-            setTransportistas(transportistasData);
-            setSubsistemas(subsistemasData);
-            setModulos(modulosData);
+    const loading = authLoading || sustratosLoading || proveedoresLoading || transportistasLoading || camionesLoading || lugaresDescargaLoading || equiposLoading || tiposMantenimientoLoading || subsistemasLoading || modulosLoading;
+    const error = [sustratosError, proveedoresError, transportistasError, camionesError, lugaresDescargaError, equiposError, tiposMantenimientoError, subsistemasError, modulosError]
+        .filter(Boolean)
+        .map(e => (e as Error).message)
+        .join('; ');
 
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    }, [activePlanta]);
-
-    useEffect(() => {
-        if (!authLoading) {
-             fetchData();
-        }
-    }, [fetchData, authLoading]);
+    const refreshData = useCallback(() => {
+        queryClient.invalidateQueries();
+    }, [queryClient]);
 
     const value = {
         sustratos,
@@ -173,9 +147,9 @@ export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ 
         tiposMantenimiento,
         subsistemas,
         modulos,
-        loading: loading || authLoading,
-        error,
-        refreshData: fetchData,
+        loading,
+        error: error || null,
+        refreshData,
     };
 
     return (

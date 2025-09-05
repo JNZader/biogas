@@ -15,6 +15,7 @@ import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { exportToCsv } from '../lib/utils';
+import { cn } from '../lib/utils';
 
 
 // --- Co-located API Logic ---
@@ -53,6 +54,24 @@ const fetchAditivosHistory = async () => {
         .order('fecha_hora', { ascending: false })
         .limit(15);
     if (error) throw error;
+    return data;
+};
+
+const fetchLastPhForEquipment = async (equipmentId: number) => {
+    if (!equipmentId) return null;
+    const { data, error } = await supabase
+        .from('analisis_fos_tac')
+        .select('ph')
+        .eq('equipo_id', equipmentId)
+        .not('ph', 'is', null)
+        .order('fecha_hora', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    
+    if (error) {
+        console.error("Error fetching last pH:", error);
+        return null;
+    }
     return data;
 };
 
@@ -112,6 +131,7 @@ const FosTacCalculator: React.FC = () => {
     const [historyLoading, setHistoryLoading] = useState(true);
     const [historyError, setHistoryError] = useState<string | null>(null);
     const [results, setResults] = useState({ fos: 0, tac: 0, ratio: 0 });
+    const [phInputKey, setPhInputKey] = useState(Date.now());
     
     const biodigestores = equipos.filter(e => e.nombre_equipo?.toLowerCase().includes('biodigestor'));
 
@@ -128,6 +148,21 @@ const FosTacCalculator: React.FC = () => {
 
     const vol1 = form.watch('vol1');
     const vol2 = form.watch('vol2');
+    const selectedEquipmentId = form.watch('equipment');
+
+    const { data: lastPhData } = useQuery({
+        queryKey: ['lastPh', selectedEquipmentId],
+        queryFn: () => fetchLastPhForEquipment(Number(selectedEquipmentId)),
+        enabled: !!selectedEquipmentId,
+    });
+
+    useEffect(() => {
+        if (lastPhData?.ph) {
+            form.setValue('ph', lastPhData.ph);
+            // Briefly flash the input to indicate it was auto-filled
+            setPhInputKey(Date.now());
+        }
+    }, [lastPhData, form]);
 
     useEffect(() => {
         const v1 = vol1 || 0;
@@ -251,7 +286,22 @@ const FosTacCalculator: React.FC = () => {
                             <FormItem><FormLabel>Fecha</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
                         )} />
                         <FormField control={form.control} name="ph" render={({ field }) => (
-                            <FormItem><FormLabel>pH</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                            <FormItem>
+                                <FormLabel>pH</FormLabel>
+                                <FormControl>
+                                    <Input 
+                                        key={phInputKey}
+                                        type="number" 
+                                        step="0.01" 
+                                        {...field} 
+                                        value={field.value ?? ''} 
+                                        onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)}
+                                        className={cn({ 'animate-pulse border-primary': phInputKey > 0 })}
+                                        onAnimationEnd={(e) => (e.currentTarget as HTMLInputElement).classList.remove('animate-pulse', 'border-primary')}
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
                         )} />
                         
                         <fieldset className="border-t border-border pt-4">

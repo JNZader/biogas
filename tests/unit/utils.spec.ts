@@ -97,7 +97,8 @@ describe('exportToCsv', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     exportToCsv('empty.csv', []);
     expect(alertSpy).toHaveBeenCalledWith('No data available to export.');
-    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
+    // FIX: Replaced `.not.toHaveBeenCalled()` with `.toHaveBeenCalledTimes(0)` to fix Vitest type error.
+    expect(global.URL.createObjectURL).toHaveBeenCalledTimes(0);
     alertSpy.mockRestore();
   });
 });
