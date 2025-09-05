@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import * as XLSX from 'xlsx';
  
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -122,4 +123,20 @@ export function exportToPdf(title: string, data: Record<string, any>[]) {
   } else {
     alert('No se pudo abrir la ventana de impresión. Por favor, deshabilite su bloqueador de ventanas emergentes.');
   }
+}
+
+/**
+ * Exports an array of objects to an XLSX (Excel) file.
+ * @param filename The desired name of the output file (without extension).
+ * @param data The array of data objects to export.
+ */
+export function exportToXlsx(filename: string, data: Record<string, any>[]) {
+  if (!data || data.length === 0) {
+    alert("No data available to export.");
+    return;
+  }
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Datos');
+  XLSX.writeFile(workbook, `${filename}.xlsx`);
 }

@@ -14,7 +14,7 @@ import { useToast } from '../hooks/use-toast';
 import { Select } from '../components/ui/Select';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { useAuth } from '../contexts/AuthContext';
-import { exportToCsv, exportToPdf } from '../lib/utils';
+import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { DataTable } from '../components/ui/DataTable';
 import { cn } from '../lib/utils';
 
@@ -55,37 +55,40 @@ const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; di
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+    const handleExport = (format: 'csv' | 'xlsx' | 'pdf') => {
         setIsOpen(false);
-        if (format === 'csv' || format === 'xls') {
-            exportToCsv(`${filename}.${format}`, data);
+        if (format === 'csv') {
+            exportToCsv(`${filename}.csv`, data);
+        } else if (format === 'xlsx') {
+            exportToXlsx(filename, data);
         } else if (format === 'pdf') {
             exportToPdf(filename, data);
         }
     };
 
     return (
-        <div className="relative">
+        <div className="relative" ref={dropdownRef}>
             <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
                 <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                 Exportar
                 <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
             </Button>
-            {isOpen && (
-                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
-                    <div className="py-1" role="menu" aria-orientation="vertical">
-                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
-                            Exportar como CSV
-                        </button>
-                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
-                            Exportar como XLS
-                        </button>
-                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
-                            Exportar como PDF
-                        </button>
-                    </div>
+            <div className={cn(
+                "absolute right-0 mt-2 w-48 origin-top-right rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 transition-all duration-100 ease-out",
+                isOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+            )}>
+                <div className="py-1" role="menu" aria-orientation="vertical">
+                    <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                        Exportar como CSV
+                    </button>
+                    <button onClick={() => handleExport('xlsx')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                        Exportar como XLSX
+                    </button>
+                    <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                        Exportar como PDF
+                    </button>
                 </div>
-            )}
+            </div>
         </div>
     );
 };
@@ -384,8 +387,8 @@ const ManagementPage: React.FC = () => {
                     <CardContent className="pt-6">
                         <div className="flex flex-col sm:flex-row justify-between items-end gap-4 mb-6">
                              <div className="w-full flex flex-col sm:flex-row gap-4">
-                                 <div className="flex-1 sm:max-w-xs space-y-2">
-                                    <Label htmlFor="entity-select">Seleccionar Entidad a Gestionar</Label>
+                                 <div className="flex-1 sm:max-w-xs">
+                                    <Label htmlFor="entity-select" className="mb-2 block">Seleccionar Entidad a Gestionar</Label>
                                     <Select id="entity-select" value={selectedEntity} onChange={e => setSelectedEntity(e.target.value as EntityKey)}>
                                         <option value="sustratos">Sustratos</option>
                                         <option value="proveedores">Proveedores</option>
@@ -395,8 +398,8 @@ const ManagementPage: React.FC = () => {
                                         <option value="equipos">Equipos</option>
                                     </Select>
                                 </div>
-                                <div className="flex-1 sm:max-w-xs space-y-2">
-                                    <Label htmlFor="filter-input">Filtrar por nombre...</Label>
+                                <div className="flex-1 sm:max-w-xs">
+                                    <Label htmlFor="filter-input" className="mb-2 block">Filtrar por nombre...</Label>
                                     <Input
                                         id="filter-input"
                                         placeholder="Escriba para filtrar..."

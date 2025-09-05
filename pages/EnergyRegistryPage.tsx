@@ -13,7 +13,7 @@ import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 import { useAuth } from '../contexts/AuthContext';
 import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { exportToCsv, exportToPdf } from '../lib/utils';
+import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { cn } from '../lib/utils';
 
 type EnergiaRecord = Database['public']['Tables']['energia']['Row'];
@@ -64,37 +64,40 @@ const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; di
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+    const handleExport = (format: 'csv' | 'xlsx' | 'pdf') => {
         setIsOpen(false);
-        if (format === 'csv' || format === 'xls') {
-            exportToCsv(`${filename}.${format}`, data);
+        if (format === 'csv') {
+            exportToCsv(`${filename}.csv`, data);
+        } else if (format === 'xlsx') {
+            exportToXlsx(filename, data);
         } else if (format === 'pdf') {
             exportToPdf(filename, data);
         }
     };
 
     return (
-        <div className="relative">
+        <div className="relative" ref={dropdownRef}>
             <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
                 <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
                 Exportar
                 <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
             </Button>
-            {isOpen && (
-                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
-                    <div className="py-1" role="menu" aria-orientation="vertical">
-                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
-                            Exportar como CSV
-                        </button>
-                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
-                            Exportar como XLS
-                        </button>
-                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
-                            Exportar como PDF
-                        </button>
-                    </div>
+            <div className={cn(
+                "absolute right-0 mt-2 w-48 origin-top-right rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 transition-all duration-100 ease-out",
+                isOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+            )}>
+                <div className="py-1" role="menu" aria-orientation="vertical">
+                    <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                        Exportar como CSV
+                    </button>
+                    <button onClick={() => handleExport('xlsx')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                        Exportar como XLSX
+                    </button>
+                    <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                        Exportar como PDF
+                    </button>
                 </div>
-            )}
+            </div>
         </div>
     );
 };
@@ -128,7 +131,7 @@ const EnergyRegistryPage: React.FC = () => {
     const mutation = useMutation({
         mutationFn: createEnergyRecord,
         onSuccess: () => {
-            toast({ title: 'Éxito', description: 'Registro diario guardado con éxito!' });
+            toast({ title: 'Éxito', description: 'Registro diario guardado com éxito!' });
             form.reset({
                  date: new Date().toISOString().split('T')[0],
                  total_gen: undefined,
