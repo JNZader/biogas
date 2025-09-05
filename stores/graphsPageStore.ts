@@ -9,7 +9,7 @@ type ChartId =
     'autoconsumptionTrend' | 'weeklyEnergy' | 'methaneProductionRate' | 'substrateCost' | 
     'engineAvailability' | 'substrateCompositionTimeline' | 'materialBalance' |
     // FIX: Added 'substrateEvolution' to the ChartId union type to resolve the type error.
-    'contractPerformance' | 'annualGoalGauge' | 'substrateEvolution';
+    'contractPerformance' | 'annualGoalGauge' | 'substrateEvolution' | 'biogasQualityTrend';
 
 interface ChartConfig {
     id: ChartId;
@@ -32,10 +32,12 @@ export const useGraphsPageStore = create<GraphsPageState>()(
                 { id: 'annualGoalGauge', title: 'Progreso vs Objetivo Anual', isVisible: true },
                 { id: 'substrateEvolution', title: 'Evolución de Sustratos (Tn)', isVisible: true },
                 { id: 'substrateCost', title: 'Costos de Sustrato vs Ingresos (USD)', isVisible: true },
-                { id: 'substrateCompositionTimeline', title: 'Composición de la Dieta (t/día)', isVisible: false },
-                { id: 'energyProduction', title: 'Producción vs. Consumo de Energía', isVisible: false },
-                { id: 'chpUptime', title: 'Disponibilidad Diaria del Motor (CHP)', isVisible: false },
-                { id: 'fosTacAbsolute', title: 'Tendencia de FOS y TAC (Absolutos)', isVisible: false },
+                { id: 'substrateCompositionTimeline', title: 'Composición de la Dieta (t/día)', isVisible: true },
+                { id: 'energyProduction', title: 'Producción vs. Consumo de Energía', isVisible: true },
+                { id: 'chpUptime', title: 'Disponibilidad Diaria del Motor (CHP)', isVisible: true },
+                { id: 'fosTacAbsolute', title: 'Tendencia de FOS y TAC (Absolutos)', isVisible: true },
+                { id: 'substrateMix', title: 'Mix Total de Sustratos', isVisible: true },
+                { id: 'biogasQualityTrend', title: 'Tendencia Calidad Biogás', isVisible: true },
             ],
             toggleChart: (id) => {
                 set((state) => ({
