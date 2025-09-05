@@ -11,6 +11,15 @@ import { KpiCard } from '../../pages/HomePage'; // The component is co-located h
 import type { KpiCardProps } from '../../pages/HomePage';
 import { BoltIcon } from '@heroicons/react/24/outline';
 
+// FIX: Mock the Link component from TanStack Router to prevent errors in a test environment that lacks a router context. This mock renders a simple anchor tag in its place.
+vi.mock('@tanstack/react-router', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@tanstack/react-router')>();
+    return {
+        ...original,
+        Link: ({ to, children, ...props }: any) => <a href={to} {...props}>{children}</a>,
+    };
+});
+
 // Mocking HeroIcons to make assertions simpler
 // FIX: Switched from 'jest' to 'vi' for mocking, which is standard in Vitest environments and resolves TypeScript errors when 'jest' is treated as a namespace.
 vi.mock('@heroicons/react/24/outline', async () => ({
@@ -27,6 +36,8 @@ describe('KpiCard', () => {
     unit: 'kWh',
     trend: 5.5,
     icon: <BoltIcon data-testid="bolt-icon" />,
+    // FIX: Added the required 'to' prop to satisfy the KpiCardProps interface and enable navigation testing.
+    to: '/test',
   };
 
   it('renders all the provided information', () => {
@@ -73,7 +84,8 @@ describe('KpiCard', () => {
   it('shows a zero trend as positive', () => {
     render(<KpiCard {...baseProps} trend={0} />);
     
-    const trendElement = screen.getByText(/0% vs last period/);
+    // FIX: Updated the regex to match the 'toFixed(1)' formatting of the trend value.
+    const trendElement = screen.getByText(/0.0% vs last period/);
     // FIX: Replaced .not.toBeNull() with .toBeDefined() to resolve TypeScript errors with jest-dom matchers in Vitest.
     expect(trendElement).toBeDefined();
     // FIX: Replaced toHaveClass with a className.toContain check to resolve TypeScript errors with jest-dom matchers in Vitest.

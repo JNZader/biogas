@@ -19,6 +19,7 @@ import { customAlertsStore } from '../stores/customAlertsStore';
 import { useDashboardStore } from '../stores/dashboardStore';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import type { Database } from '../types/database';
+import { Link } from '@tanstack/react-router';
 
 // --- Co-located API Logic ---
 // FIX: Typed the 'table' parameter to be a valid table name from the database schema to satisfy Supabase's typed client.
@@ -132,30 +133,33 @@ export interface KpiCardProps {
   unit?: string;
   trend: number; // percentage change, e.g., 5 for +5%, -2 for -2%
   icon: React.ReactNode;
+  to: string; // The destination path for navigation
 }
 
-export const KpiCard: React.FC<KpiCardProps> = ({ title, value, unit, trend, icon }) => {
+export const KpiCard: React.FC<KpiCardProps> = ({ title, value, unit, trend, icon, to }) => {
   const isPositive = trend >= 0;
   const trendColor = isPositive ? 'text-success' : 'text-error';
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-2 p-4">
-        <h3 className="text-sm font-medium text-text-secondary">{title}</h3>
-        <div className="text-primary">{icon}</div>
-      </div>
-      <CardContent className="pt-0">
-        <p className="text-3xl font-bold text-text-primary">
-          {value}
-          {unit && <span className="text-lg font-medium text-text-secondary ml-1">{unit}</span>}
-        </p>
-        <div className={`flex items-center text-sm font-medium ${trendColor}`}>
-          {isPositive ? <ArrowUpIcon className="h-4 w-4 mr-1" aria-hidden="true" /> : <ArrowDownIcon className="h-4 w-4 mr-1" aria-hidden="true" />}
-          <span className="sr-only">{isPositive ? 'Aumento del' : 'Disminución del'}</span>
-          <span>{Math.abs(trend).toFixed(1)}% vs last period</span>
+    <Link to={to} className="block">
+      <Card className="h-full transition-shadow duration-200 hover:shadow-lg hover:border-primary/30">
+        <div className="flex items-center justify-between mb-2 p-4">
+          <h3 className="text-sm font-medium text-text-secondary">{title}</h3>
+          <div className="text-primary">{icon}</div>
         </div>
-      </CardContent>
-    </Card>
+        <CardContent className="pt-0">
+          <p className="text-3xl font-bold text-text-primary">
+            {value}
+            {unit && <span className="text-lg font-medium text-text-secondary ml-1">{unit}</span>}
+          </p>
+          <div className={`flex items-center text-sm font-medium ${trendColor}`}>
+            {isPositive ? <ArrowUpIcon className="h-4 w-4 mr-1" aria-hidden="true" /> : <ArrowDownIcon className="h-4 w-4 mr-1" aria-hidden="true" />}
+            <span className="sr-only">{isPositive ? 'Aumento del' : 'Disminución del'}</span>
+            <span>{Math.abs(trend).toFixed(1)}% vs last period</span>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   );
 };
 
@@ -289,10 +293,10 @@ const HomePage: React.FC = () => {
   const { kpiData, chartData, trendData } = data || { kpiData: null, chartData: [], trendData: null };
 
   const kpiDefinitions = useMemo<Record<string, KpiCardProps>>(() => ({
-    generacion: { title: 'Generación Eléctrica', value: kpiData?.generacion || '...', unit: 'MWh', trend: trendData?.generacion ?? 0, icon: <BoltIcon className="h-6 w-6" /> },
-    biogas: { title: 'Producción Biogás', value: kpiData?.biogas || '...', unit: 'kg/d', trend: trendData?.biogas ?? 0, icon: <FireIcon className="h-6 w-6" /> },
-    fosTac: { title: 'FOS/TAC', value: kpiData?.fosTac || '...', trend: trendData?.fosTac ?? 0, icon: <BeakerIcon className="h-6 w-6" /> },
-    ch4: { title: 'Calidad Gas (CH4)', value: kpiData?.ch4 || '...', unit: '%', trend: trendData?.ch4 ?? 0, icon: <AdjustmentsHorizontalIcon className="h-6 w-6" /> },
+    generacion: { title: 'Generación Eléctrica', value: kpiData?.generacion || '...', unit: 'MWh', trend: trendData?.generacion ?? 0, icon: <BoltIcon className="h-6 w-6" />, to: '/energy' },
+    biogas: { title: 'Producción Biogás', value: kpiData?.biogas || '...', unit: 'kg/d', trend: trendData?.biogas ?? 0, icon: <FireIcon className="h-6 w-6" />, to: '/gas-quality' },
+    fosTac: { title: 'FOS/TAC', value: kpiData?.fosTac || '...', trend: trendData?.fosTac ?? 0, icon: <BeakerIcon className="h-6 w-6" />, to: '/pfq' },
+    ch4: { title: 'Calidad Gas (CH4)', value: kpiData?.ch4 || '...', unit: '%', trend: trendData?.ch4 ?? 0, icon: <AdjustmentsHorizontalIcon className="h-6 w-6" />, to: '/gas-quality' },
   }), [kpiData, trendData]);
 
   const visibleKpis = useMemo(() => 
