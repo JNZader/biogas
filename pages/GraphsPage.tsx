@@ -408,7 +408,7 @@ const GraphsPage: React.FC = () => {
                             <KpiCard title="Energía Total Producida" value={memoizedData.kpiData.totalEnergyMWh} unit="MWh" />
                             <KpiCard title="Disponibilidad Motor (CHP)" value={memoizedData.kpiData.chpUptime.toFixed(1)} unit="%" />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {visibleCharts.length === 0 ? (
                                 <p className="md:col-span-2 xl:col-span-4 text-center text-text-secondary py-10">No hay gráficos seleccionados. Haz clic en el ícono de engranaje para personalizar tu vista.</p>
                             ) : (
