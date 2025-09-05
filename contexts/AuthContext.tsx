@@ -162,10 +162,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loading,
     };
 
-    return <AuthContext.Provider value={value}>{children}</Auth.Provider>;
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
+    // FIX: Corrected a likely typo from `Auth` to `AuthContext` to resolve "Cannot find name 'Auth'" error.
     const context = useContext(AuthContext);
     if (context === undefined) {
         throw new Error('useAuth must be used within an AuthProvider');

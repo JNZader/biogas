@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
@@ -16,9 +16,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
-import { PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
-import { exportToCsv } from '../lib/utils';
+import { exportToCsv, exportToPdf } from '../lib/utils';
+import { cn } from '../lib/utils';
 
 
 // --- Co-located Secure Markdown Renderer ---
@@ -121,6 +122,56 @@ interface EnrichedAlimentacionRecord extends AlimentacionRecord {
     equipo_origen?: { nombre_equipo: string } | null;
     equipo_destino?: { nombre_equipo: string } | null;
 }
+
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
   <button
@@ -251,17 +302,14 @@ const LogFeeding: React.FC = () => {
         mutation.mutate(data);
     }
 
-    const handleExport = () => {
-        const dataToExport = history.map(item => ({
-            fecha_hora: new Date(item.fecha_hora!).toLocaleString('es-AR'),
-            origen: (item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A',
-            destino: (item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A',
-            cantidad: item.cantidad,
-            unidad: item.unidad,
-            observaciones: item.observaciones,
-        }));
-        exportToCsv('historial_alimentacion.csv', dataToExport);
-    };
+    const dataToExport = useMemo(() => history.map(item => ({
+        fecha_hora: new Date(item.fecha_hora!).toLocaleString('es-AR'),
+        origen: (item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A',
+        destino: (item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A',
+        cantidad: item.cantidad,
+        unidad: item.unidad,
+        observaciones: item.observaciones,
+    })), [history]);
 
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
@@ -378,10 +426,7 @@ const LogFeeding: React.FC = () => {
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Alimentación Reciente</h3>
-                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="historial_alimentacion" disabled={history.length === 0} />
                     </div>
                     {isHistoryLoading ? <p className="text-center text-text-secondary">Cargando historial...</p> : (
                          <div className="overflow-x-auto">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -12,8 +12,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
-import { exportToCsv } from '../lib/utils';
+import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { exportToCsv, exportToPdf } from '../lib/utils';
+import { cn } from '../lib/utils';
 
 type EnergiaRecord = Database['public']['Tables']['energia']['Row'];
 
@@ -47,6 +48,57 @@ const createEnergyRecord = async (recordData: Database['public']['Tables']['ener
     const { error } = await supabase.from('energia').insert(recordData);
     if (error) throw error;
 };
+
+// --- Co-located Export Component ---
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 const EnergyRegistryPage: React.FC = () => {
     const { toast } = useToast();
@@ -113,18 +165,15 @@ const EnergyRegistryPage: React.FC = () => {
         mutation.mutate(insertData);
     }
     
-    const handleExport = () => {
-        const dataToExport = history.map(item => ({
-            fecha: new Date(item.fecha + 'T00:00:00').toLocaleDateString('es-AR'),
-            generacion_electrica_total_kwh_dia: item.generacion_electrica_total_kwh_dia,
-            flujo_biogas_kg_dia: item.flujo_biogas_kg_dia,
-            horas_motor_chp: item.horas_funcionamiento_motor_chp_dia,
-            despacho_spot_kwh: item.despacho_spot_smec_kwh_dia,
-            totalizador_smec_kwh: item.totalizador_smec_kwh,
-            totalizador_chp_mwh: item.totalizador_chp_mwh,
-        }));
-        exportToCsv('historial_energia.csv', dataToExport);
-    };
+    const dataToExport = history.map(item => ({
+        fecha: new Date(item.fecha + 'T00:00:00').toLocaleDateString('es-AR'),
+        generacion_electrica_total_kwh_dia: item.generacion_electrica_total_kwh_dia,
+        flujo_biogas_kg_dia: item.flujo_biogas_kg_dia,
+        horas_motor_chp: item.horas_funcionamiento_motor_chp_dia,
+        despacho_spot_kwh: item.despacho_spot_smec_kwh_dia,
+        totalizador_smec_kwh: item.totalizador_smec_kwh,
+        totalizador_chp_mwh: item.totalizador_chp_mwh,
+    }));
 
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
@@ -245,10 +294,7 @@ const EnergyRegistryPage: React.FC = () => {
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Registros Recientes</h3>
-                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="historial_energia" disabled={history.length === 0} />
                   </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>

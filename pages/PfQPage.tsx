@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -13,8 +13,8 @@ import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../hooks/use-toast';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
-import { exportToCsv } from '../lib/utils';
+import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { exportToCsv, exportToPdf } from '../lib/utils';
 import { cn } from '../lib/utils';
 
 
@@ -79,6 +79,56 @@ const fetchLastPhForEquipment = async (equipmentId: number) => {
         return null;
     }
     return data;
+};
+
+// --- Co-located Export Component ---
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 
@@ -209,17 +259,14 @@ const FosTacCalculator: React.FC = () => {
         mutation.mutate(data);
     };
 
-    const handleExport = () => {
-        const dataToExport = history.map(item => ({
-            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
-            equipo: item.equipos?.nombre_equipo || 'N/A',
-            ph: item.ph,
-            fos_mg_l: item.fos_mg_l?.toFixed(2) ?? 'N/A',
-            tac_mg_l: item.tac_mg_l?.toFixed(2) ?? 'N/A',
-            relacion_fos_tac: item.relacion_fos_tac?.toFixed(3) ?? 'N/A',
-        }));
-        exportToCsv('historial_fos_tac.csv', dataToExport);
-    };
+    const dataToExport = useMemo(() => history.map(item => ({
+        fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+        equipo: item.equipos?.nombre_equipo || 'N/A',
+        ph: item.ph,
+        fos_mg_l: item.fos_mg_l?.toFixed(2) ?? 'N/A',
+        tac_mg_l: item.tac_mg_l?.toFixed(2) ?? 'N/A',
+        relacion_fos_tac: item.relacion_fos_tac?.toFixed(3) ?? 'N/A',
+    })), [history]);
 
     if (dataError) {
         return (
@@ -316,10 +363,7 @@ const FosTacCalculator: React.FC = () => {
                 <CardContent className="pt-6">
                    <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-text-primary">Historial de Análisis Recientes</h2>
-                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="historial_fos_tac" disabled={history.length === 0} />
                    </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
@@ -416,15 +460,12 @@ const Additives: React.FC = () => {
         mutation.mutate(data);
     };
     
-    const handleExport = () => {
-        const dataToExport = (history as EnrichedAditivoRecord[]).map(item => ({
-            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
-            aditivo: item.tipo_aditivo,
-            cantidad_kg: item.cantidad_kg,
-            equipo: item.equipos?.nombre_equipo,
-        }));
-        exportToCsv('historial_aditivos.csv', dataToExport);
-    };
+    const dataToExport = useMemo(() => (history as EnrichedAditivoRecord[]).map(item => ({
+        fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+        aditivo: item.tipo_aditivo,
+        cantidad_kg: item.cantidad_kg,
+        equipo: item.equipos?.nombre_equipo,
+    })), [history]);
 
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
@@ -485,10 +526,7 @@ const Additives: React.FC = () => {
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Aditivos Recientes</h3>
-                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="historial_aditivos" disabled={history.length === 0} />
                   </div>
                   {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>

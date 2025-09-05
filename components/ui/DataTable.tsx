@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Input } from './Input';
 import { Button } from './Button';
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -14,45 +14,29 @@ export interface ColumnDef<T> {
 interface DataTableProps<T> {
     columns: ColumnDef<T>[];
     data: T[];
-    filterColumn: keyof T;
     onEdit: (item: T) => void;
     onDelete: (item: T) => void;
 }
 
-export function DataTable<T extends { id: any }>({ columns, data, filterColumn, onEdit, onDelete }: DataTableProps<T>) {
-    const [filter, setFilter] = useState('');
+export function DataTable<T extends { id: any }>({ columns, data, onEdit, onDelete }: DataTableProps<T>) {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
-
-    const filteredData = useMemo(() => {
-        if (!filter) return data;
-        return data.filter(item => {
-            const value = item[filterColumn];
-            // Ensure value is a string before calling toLowerCase
-            return value && typeof value === 'string' && value.toLowerCase().includes(filter.toLowerCase());
-        });
-    }, [data, filter, filterColumn]);
+    
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [data]);
 
     const paginatedData = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredData.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredData, currentPage, itemsPerPage]);
+        return data.slice(startIndex, startIndex + itemsPerPage);
+    }, [data, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+    const totalPages = Math.ceil(data.length / itemsPerPage);
 
     const commonClasses = "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider";
 
     return (
         <div className="space-y-4">
-            <Input
-                placeholder={`Filtrar por ${String(filterColumn)}...`}
-                value={filter}
-                onChange={(e) => {
-                    setFilter(e.target.value);
-                    setCurrentPage(1); // Reset to first page on filter change
-                }}
-                className="max-w-sm"
-            />
             <div className="overflow-x-auto border border-border rounded-lg">
                  <table className="min-w-full divide-y divide-border">
                     <thead className="bg-background">
@@ -68,7 +52,7 @@ export function DataTable<T extends { id: any }>({ columns, data, filterColumn, 
                                      <EmptyState
                                         icon={<ArchiveBoxIcon className="mx-auto h-12 w-12" />}
                                         title="No se encontraron resultados"
-                                        message={filter ? "Intente ajustar su búsqueda." : "No hay datos para mostrar."}
+                                        message="No hay registros que coincidan con los filtros aplicados."
                                     />
                                 </td>
                             </tr>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
@@ -10,13 +10,14 @@ import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
 import { useSupabaseData } from '../contexts/SupabaseContext';
-import { PencilIcon, TrashIcon, PlusCircleIcon, ArchiveBoxIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PencilIcon, TrashIcon, PlusCircleIcon, ArchiveBoxIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../components/EmptyState';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
-import { exportToCsv } from '../lib/utils';
+import { exportToCsv, exportToPdf } from '../lib/utils';
 import { PlantaId, RepuestoId } from '../types/branded';
+import { cn } from '../lib/utils';
 
 type Repuesto = Database['public']['Tables']['repuestos']['Row'];
 type RepuestoInsert = Database['public']['Tables']['repuestos']['Insert'];
@@ -53,6 +54,56 @@ type MutationVars =
   | { mode: 'add'; item: RepuestoInsert }
   | { mode: 'edit'; item: RepuestoUpdate; id: RepuestoId }
   | { mode: 'delete'; id: RepuestoId };
+
+// --- Co-located Export Component ---
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 
 const StockPage: React.FC = () => {
@@ -157,22 +208,19 @@ const StockPage: React.FC = () => {
         return 'bg-success-bg text-success';
     };
 
-    const handleExport = () => {
-        const dataToExport = stockItems.map(item => {
-            const proveedor = proveedores.find(p => p.id === item.proveedor_principal_empresa_id);
-            return {
-                nombre_repuesto: item.nombre_repuesto,
-                sku: item.codigo_sku || 'N/A',
-                proveedor: proveedor?.nombre || 'N/A',
-                stock_actual: item.stock_actual,
-                stock_minimo: item.stock_minimo,
-                stock_maximo: item.stock_maximo,
-                ubicacion: item.ubicacion_almacen,
-                estado: getStatus(item) === 'low' ? 'Bajo Stock' : 'OK',
-            };
-        });
-        exportToCsv('inventario_stock.csv', dataToExport);
-    };
+    const dataToExport = useMemo(() => stockItems.map(item => {
+        const proveedor = proveedores.find(p => p.id === item.proveedor_principal_empresa_id);
+        return {
+            nombre_repuesto: item.nombre_repuesto,
+            sku: item.codigo_sku || 'N/A',
+            proveedor: proveedor?.nombre || 'N/A',
+            stock_actual: item.stock_actual,
+            stock_minimo: item.stock_minimo,
+            stock_maximo: item.stock_maximo,
+            ubicacion: item.ubicacion_almacen,
+            estado: getStatus(item) === 'low' ? 'Bajo Stock' : 'OK',
+        };
+    }), [stockItems, proveedores]);
 
     if (stockLoading) {
         return <Page><Card><CardContent className="pt-6"><p className="text-center text-text-secondary">Cargando inventario...</p></CardContent></Card></Page>
@@ -194,10 +242,7 @@ const StockPage: React.FC = () => {
                             <PlusCircleIcon className="h-5 w-5"/>
                             Añadir Nuevo Ítem
                         </Button>
-                        <Button variant="outline" size="sm" onClick={handleExport} disabled={stockItems.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="inventario_stock" disabled={stockItems.length === 0} />
                     </div>
                 </div>
                 

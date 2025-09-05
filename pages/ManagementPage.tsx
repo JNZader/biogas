@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -8,14 +8,15 @@ import { Label } from '../components/ui/Label';
 import { Textarea } from '../components/ui/Textarea';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
-import { PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import type { Database } from '../types/database';
 import { useToast } from '../hooks/use-toast';
 import { Select } from '../components/ui/Select';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
 import { useAuth } from '../contexts/AuthContext';
-import { exportToCsv } from '../lib/utils';
+import { exportToCsv, exportToPdf } from '../lib/utils';
 import { DataTable } from '../components/ui/DataTable';
+import { cn } from '../lib/utils';
 
 
 // --- Co-located API Logic ---
@@ -39,6 +40,57 @@ const deleteEntity = async ({ tableName, id }: { tableName: TableName; id: numbe
     return { success: true };
 };
 
+// --- Co-located Export Component ---
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 // --- Feature Components ---
 type EntityKey = 'sustratos' | 'proveedores' | 'transportistas' | 'camiones' | 'lugaresDescarga' | 'equipos';
 type Sustrato = Database['public']['Tables']['sustratos']['Row'];
@@ -61,7 +113,7 @@ const ManagementPage: React.FC = () => {
     const { activePlanta } = useAuth();
     const { toast } = useToast();
 
-    const [selectedEntity, setSelectedEntity] = useState<EntityKey>('sustratos');
+    const [selectedEntity, setSelectedEntity] = useState<EntityKey>('transportistas');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentItem, setCurrentItem] = useState<ManagedEntity | null>(null);
     const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
@@ -72,6 +124,7 @@ const ManagementPage: React.FC = () => {
     const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; item: ManagedEntity | null }>({ isOpen: false, item: null });
     const [deleteLoading, setDeleteLoading] = useState(false);
     
+    const [filter, setFilter] = useState('');
 
     const getTableName = (entity: EntityKey): TableName => {
         if (entity === 'proveedores' || entity === 'transportistas') return 'empresa';
@@ -188,6 +241,14 @@ const ManagementPage: React.FC = () => {
         }
         return baseConfig;
     }, [selectedEntity, sustratos, proveedores, camiones, lugaresDescarga, equipos, transportistas]);
+    
+    const filteredData = useMemo(() => {
+        if (!filter) return managementConfig.data;
+        return managementConfig.data.filter(item => {
+            const value = item[managementConfig.filterColumn];
+            return value && typeof value === 'string' && value.toLowerCase().includes(filter.toLowerCase());
+        });
+    }, [managementConfig.data, filter, managementConfig.filterColumn]);
 
 
     const handleOpenModal = (mode: 'add' | 'edit', item: ManagedEntity | null = null) => {
@@ -270,13 +331,10 @@ const ManagementPage: React.FC = () => {
         }
     };
     
-    const handleExport = () => {
-        let dataToExport: any[] = managementConfig.data;
-        let filename = `${selectedEntity}.csv`;
-        
-        // Custom transformations for export if needed
+    const dataToExport = useMemo(() => {
+        let data = managementConfig.data;
         if (selectedEntity === 'camiones') {
-            dataToExport = camiones.map(c => ({
+            return camiones.map(c => ({
                 patente: c.patente,
                 marca: c.marca,
                 modelo: c.modelo,
@@ -284,13 +342,13 @@ const ManagementPage: React.FC = () => {
                 transportista: transportistas.find(t => t.id === c.transportista_empresa_id)?.nombre || 'N/A',
             }));
         } else {
-             dataToExport = managementConfig.data.map(item => {
+             return data.map(item => {
                 const { id, created_at, updated_at, activo, planta_id, ...rest } = item as any;
                 return rest;
             });
         }
-        exportToCsv(filename, dataToExport);
-    };
+    }, [managementConfig.data, selectedEntity, camiones, transportistas]);
+
 
     const getItemName = (item: ManagedEntity | null): string => {
         if (!item) return '';
@@ -324,35 +382,42 @@ const ManagementPage: React.FC = () => {
                  {dataError && <Card><CardContent className="pt-6"><p className="text-red-500">{dataError}</p></CardContent></Card>}
                 <Card>
                     <CardContent className="pt-6">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                             <div className="flex-1 w-full sm:max-w-xs">
-                                <Label htmlFor="entity-select">Seleccionar Entidad a Gestionar</Label>
-                                <Select id="entity-select" value={selectedEntity} onChange={e => setSelectedEntity(e.target.value as EntityKey)}>
-                                    <option value="sustratos">Sustratos</option>
-                                    <option value="proveedores">Proveedores</option>
-                                    <option value="transportistas">Transportistas</option>
-                                    <option value="camiones">Camiones</option>
-                                    <option value="lugaresDescarga">Lugares Descarga</option>
-                                    <option value="equipos">Equipos</option>
-                                </Select>
+                        <div className="flex flex-col sm:flex-row justify-between items-end gap-4 mb-6">
+                             <div className="w-full flex flex-col sm:flex-row gap-4">
+                                 <div className="flex-1 sm:max-w-xs space-y-2">
+                                    <Label htmlFor="entity-select">Seleccionar Entidad a Gestionar</Label>
+                                    <Select id="entity-select" value={selectedEntity} onChange={e => setSelectedEntity(e.target.value as EntityKey)}>
+                                        <option value="sustratos">Sustratos</option>
+                                        <option value="proveedores">Proveedores</option>
+                                        <option value="transportistas">Transportistas</option>
+                                        <option value="camiones">Camiones</option>
+                                        <option value="lugaresDescarga">Lugares Descarga</option>
+                                        <option value="equipos">Equipos</option>
+                                    </Select>
+                                </div>
+                                <div className="flex-1 sm:max-w-xs space-y-2">
+                                    <Label htmlFor="filter-input">Filtrar por nombre...</Label>
+                                    <Input
+                                        id="filter-input"
+                                        placeholder="Escriba para filtrar..."
+                                        value={filter}
+                                        onChange={(e) => setFilter(e.target.value)}
+                                    />
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2 self-end sm:self-center">
-                                <Button onClick={() => handleOpenModal('add')} variant="secondary" size="sm">
+                            <div className="flex items-center gap-2 self-end">
+                                <Button onClick={() => handleOpenModal('add')} variant="secondary" size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
                                     <PlusCircleIcon className="h-5 w-5 mr-2" />
                                     Añadir Nuevo
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={handleExport} disabled={managementConfig.data.length === 0}>
-                                    <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                                    Exportar
-                                </Button>
+                                <ExportButton data={dataToExport} filename={selectedEntity} disabled={managementConfig.data.length === 0} />
                             </div>
                         </div>
 
                         {dataLoading ? <p>Cargando datos...</p> : (
                              <DataTable
                                 columns={managementConfig.columns}
-                                data={managementConfig.data}
-                                filterColumn={managementConfig.filterColumn}
+                                data={filteredData}
                                 onEdit={(item) => handleOpenModal('edit', item)}
                                 onDelete={openDeleteConfirmation}
                             />

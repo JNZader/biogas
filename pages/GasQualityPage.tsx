@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -10,13 +10,14 @@ import { useToast } from '../hooks/use-toast';
 import type { Database } from '../types/database';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
-import { PlusCircleIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
-import { exportToCsv } from '../lib/utils';
+import { exportToCsv, exportToPdf } from '../lib/utils';
+import { cn } from '../lib/utils';
 
 // --- Co-located Zod Schema ---
 const gasReadingSchema = z.object({
@@ -57,6 +58,56 @@ const createGasReading = async (formData: GasReadingFormData) => {
     });
     if (error) throw error;
     return { success: true };
+};
+
+// --- Co-located Export Component ---
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 // --- Feature Components ---
@@ -108,20 +159,17 @@ const GasQualityPage: React.FC = () => {
         mutation.mutate(data);
     };
 
-    const handleExport = () => {
-        const dataToExport = history.map(item => ({
-            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
-            equipo: (item as GasReadingHistoryItem).equipos?.nombre_equipo,
-            ch4_porcentaje: item.ch4_porcentaje,
-            co2_porcentaje: item.co2_porcentaje,
-            o2_porcentaje: item.o2_porcentaje,
-            h2s_ppm: item.h2s_ppm,
-            potencia_kw: item.potencia_exacta_kw ?? 'N/A',
-            caudal_scada_kgh: item.caudal_masico_scada_kgh ?? 'N/A',
-            caudal_chp_ls: item.caudal_chp_ls ?? 'N/A',
-        }));
-        exportToCsv('historial_calidad_gas.csv', dataToExport);
-    };
+    const dataToExport = history.map(item => ({
+        fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+        equipo: (item as GasReadingHistoryItem).equipos?.nombre_equipo,
+        ch4_porcentaje: item.ch4_porcentaje,
+        co2_porcentaje: item.co2_porcentaje,
+        o2_porcentaje: item.o2_porcentaje,
+        h2s_ppm: item.h2s_ppm,
+        potencia_kw: item.potencia_exacta_kw ?? 'N/A',
+        caudal_scada_kgh: item.caudal_masico_scada_kgh ?? 'N/A',
+        caudal_chp_ls: item.caudal_chp_ls ?? 'N/A',
+    }));
 
     const equipmentFormFields: QuickFormField[] = [
         { name: 'nombre_equipo', label: 'Nombre del Equipo', type: 'text', required: true },
@@ -230,10 +278,7 @@ const GasQualityPage: React.FC = () => {
                 <CardContent className="pt-6">
                    <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-text-primary">Historial de Mediciones Recientes</h2>
-                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="historial_calidad_gas" disabled={history.length === 0} />
                    </div>
                    {isHistoryLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>

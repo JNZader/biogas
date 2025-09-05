@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,17 +10,18 @@ import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/Dialog';
 import { useSupabaseData } from '../contexts/SupabaseContext';
-import { PlusCircleIcon, ClipboardDocumentCheckIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ClipboardDocumentCheckIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../components/EmptyState';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { useToast } from '../hooks/use-toast.ts';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
-import { exportToCsv } from '../lib/utils';
+import { exportToCsv, exportToPdf } from '../lib/utils';
 import { ChecklistItemId, EquipoId } from '../types/branded';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
+import { cn } from '../lib/utils';
 
 
 type ChecklistItem = Database['public']['Tables']['checklist_items']['Row'];
@@ -215,6 +216,55 @@ const Checklist: React.FC = () => {
     );
 };
 
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const Tasks: React.FC = () => {
     const { equipos, tiposMantenimiento, loading: dataLoading, error: dataError, refreshData } = useSupabaseData();
     const { toast } = useToast();
@@ -379,16 +429,13 @@ const Tasks: React.FC = () => {
         setQuickAddState({ isOpen: true, ...config });
     };
 
-    const handleHistoryExport = () => {
-        const dataToExport = history.map(item => ({
-            fecha_fin: item.fecha_fin ? new Date(item.fecha_fin).toLocaleDateString('es-AR') : 'N/A',
-            equipo: item.equipos?.nombre_equipo,
-            tipo_mantenimiento: item.tipos_mantenimiento?.nombre_tipo,
-            descripcion_problema: item.descripcion_problema,
-            trabajo_realizado: item.descripcion_trabajo_realizado,
-        }));
-        exportToCsv('historial_mantenimiento.csv', dataToExport);
-    };
+    const dataToExport = useMemo(() => history.map(item => ({
+        fecha_fin: item.fecha_fin ? new Date(item.fecha_fin).toLocaleDateString('es-AR') : 'N/A',
+        equipo: item.equipos?.nombre_equipo,
+        tipo_mantenimiento: item.tipos_mantenimiento?.nombre_tipo,
+        descripcion_problema: item.descripcion_problema,
+        trabajo_realizado: item.descripcion_trabajo_realizado,
+    })), [history]);
 
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
@@ -457,10 +504,7 @@ const Tasks: React.FC = () => {
                 <CardContent className="pt-6">
                    <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-text-primary">Historial de Tareas Completadas</h2>
-                        <Button variant="outline" size="sm" onClick={handleHistoryExport} disabled={history.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="historial_mantenimiento" disabled={history.length === 0} />
                    </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>

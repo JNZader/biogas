@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,7 +14,7 @@ import { Select } from '../components/ui/Select';
 import EmptyState from '../components/EmptyState';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
-import { cn, exportToCsv } from '../lib/utils';
+import { cn, exportToCsv, exportToPdf } from '../lib/utils';
 import { useToast } from '../hooks/use-toast';
 import { customAlertsStore } from '../stores/customAlertsStore';
 // FIX: Imported Form components to resolve multiple 'Cannot find name' errors.
@@ -30,6 +30,7 @@ import {
     TrashIcon,
     ArrowDownTrayIcon,
     WrenchScrewdriverIcon,
+    ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 
 // --- Type Definitions ---
@@ -76,6 +77,56 @@ const fetchAlarms = async (): Promise<EnrichedAlarma[]> => {
 };
 
 // --- Helper Components ---
+
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const Badge: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
     <span className={cn('px-2 inline-flex text-xs leading-5 font-semibold rounded-full', className)}>
         {children}
@@ -311,17 +362,15 @@ const AlarmsPage: React.FC = () => {
         'info': 'bg-background text-text-secondary',
     }[severity]);
 
-    const handleExport = () => {
-        const dataToExport = processedAlarms.map(alarm => ({
-            fecha_hora: new Date(alarm.timestamp).toLocaleString('es-AR'),
-            tipo_alarma: alarm.alarmType,
-            descripcion: alarm.description,
-            severidad: alarm.severity,
-            estado: alarm.isResolved ? 'Resuelta' : 'Pendiente',
-            origen: alarm.isCustom ? 'Personalizada' : 'Sistema',
-        }));
-        exportToCsv('historial_alarmas.csv', dataToExport);
-    };
+    const dataToExport = useMemo(() => processedAlarms.map(alarm => ({
+        fecha_hora: new Date(alarm.timestamp).toLocaleString('es-AR'),
+        tipo_alarma: alarm.alarmType,
+        descripcion: alarm.description,
+        severidad: alarm.severity,
+        estado: alarm.isResolved ? 'Resuelta' : 'Pendiente',
+        origen: alarm.isCustom ? 'Personalizada' : 'Sistema',
+    })), [processedAlarms]);
+
 
     if (error) {
         return <Page><Card><CardContent className="pt-6 text-error">Error al Cargar Alarmas: {error.message}</CardContent></Card></Page>;
@@ -334,10 +383,7 @@ const AlarmsPage: React.FC = () => {
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Historial de Alarmas</CardTitle>
-                    <Button variant="outline" size="sm" onClick={handleExport} disabled={processedAlarms.length === 0}>
-                        <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                        Exportar
-                    </Button>
+                    <ExportButton data={dataToExport} filename="historial_alarmas" disabled={processedAlarms.length === 0} />
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,9 +16,10 @@ import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
-import { exportToCsv } from '../lib/utils';
+import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { exportToCsv, exportToPdf } from '../lib/utils';
 import { PlantaId } from '../types/branded';
+import { cn } from '../lib/utils';
 
 type ChpChangeRecord = Database['public']['Tables']['cambios_potencia_chp']['Row'];
 
@@ -48,6 +49,56 @@ const fetchChpHistory = async (plantaId: PlantaId): Promise<ChpChangeRecord[]> =
 const createChpChange = async (newData: Omit<ChpChangeRecord, 'id' | 'created_at' | 'updated_at'>) => {
     const { error } = await supabase.from('cambios_potencia_chp').insert(newData);
     if (error) throw error;
+};
+
+// --- Co-located Export Component ---
+const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const handleExport = (format: 'csv' | 'xls' | 'pdf') => {
+        setIsOpen(false);
+        if (format === 'csv' || format === 'xls') {
+            exportToCsv(`${filename}.${format}`, data);
+        } else if (format === 'pdf') {
+            exportToPdf(filename, data);
+        }
+    };
+
+    return (
+        <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                Exportar
+                <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
+            </Button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 animate-toast-in origin-top">
+                    <div className="py-1" role="menu" aria-orientation="vertical">
+                        <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como CSV
+                        </button>
+                        <button onClick={() => handleExport('xls')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como XLS
+                        </button>
+                        <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">
+                            Exportar como PDF
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 };
 
 
@@ -109,16 +160,13 @@ const ChpControlPage: React.FC = () => {
         mutation.mutate(changeData);
     };
   
-    const handleExport = () => {
-        const dataToExport = history.map(item => ({
-            fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
-            potencia_inicial_kw: item.potencia_inicial_kw,
-            potencia_programada_kw: item.potencia_programada_kw,
-            motivo: item.motivo_cambio,
-            observaciones: item.observaciones,
-        }));
-        exportToCsv('historial_cambios_chp.csv', dataToExport);
-    };
+    const dataToExport = history.map(item => ({
+        fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
+        potencia_inicial_kw: item.potencia_inicial_kw,
+        potencia_programada_kw: item.potencia_programada_kw,
+        motivo: item.motivo_cambio,
+        observaciones: item.observaciones,
+    }));
 
     const commonTableClasses = {
         head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
@@ -175,10 +223,7 @@ const ChpControlPage: React.FC = () => {
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Cambios Recientes</h3>
-                        <Button variant="outline" size="sm" onClick={handleExport} disabled={history.length === 0}>
-                            <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
-                            Exportar
-                        </Button>
+                        <ExportButton data={dataToExport} filename="historial_cambios_chp" disabled={history.length === 0} />
                     </div>
                     {historyLoading ? (
                         <p className="text-center text-text-secondary">Cargando historial...</p>
