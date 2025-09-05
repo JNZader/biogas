@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
 import { Switch } from '../components/ui/Switch';
+import { Select } from '../components/ui/Select';
 import { Label } from '../components/ui/Label';
 import { Button } from '../components/ui/Button';
 import Page from '../components/Page';
@@ -16,14 +17,22 @@ import { cn } from '../lib/utils';
 import { useStore as useZustandStore } from 'zustand';
 import { customAlertsStore } from '../stores/customAlertsStore';
 import { useDashboardStore } from '../stores/dashboardStore';
+import { useSupabaseData } from '../contexts/SupabaseContext';
 
 // --- Co-located API Logic ---
-const fetchDashboardData = async (timeRange: number) => {
+const fetchDashboardData = async (timeRange: number, biodigesterId: number) => {
+    const baseKpiQuery = (table: string, column: string) =>
+        supabase.from(table).select(column).eq('equipo_id', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle();
+    
+    // The gas quality query uses a different foreign key column name.
+    const gasKpiQuery = (table: string, column: string) =>
+        supabase.from(table).select(column).eq('equipo_id_fk', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle();
+
     const [kpiResults, chartRes] = await Promise.all([
         Promise.all([
             supabase.from('energia').select('generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').order('fecha', { ascending: false }).limit(1).maybeSingle(),
-            supabase.from('analisis_fos_tac').select('relacion_fos_tac').order('fecha_hora', { ascending: false }).limit(1).maybeSingle(),
-            supabase.from('lecturas_gas').select('ch4_porcentaje').order('fecha_hora', { ascending: false }).limit(1).maybeSingle(),
+            baseKpiQuery('analisis_fos_tac', 'relacion_fos_tac'),
+            gasKpiQuery('lecturas_gas', 'ch4_porcentaje'),
         ]),
         supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').gte('fecha', new Date(Date.now() - timeRange * 24 * 60 * 60 * 1000).toISOString().split('T')[0]).order('fecha', { ascending: true }),
     ]);
@@ -181,13 +190,24 @@ const CustomizeDashboardModal: React.FC<{ isOpen: boolean; onClose: () => void; 
 const HomePage: React.FC = () => {
   const themeColors = useThemeColors();
   const [timeRange, setTimeRange] = useState<number>(7);
+  const { equipos } = useSupabaseData();
+  const biodigestores = useMemo(() => equipos.filter(e => e.categoria?.toLowerCase().includes('biodigestor')), [equipos]);
+  const [selectedBiodigesterId, setSelectedBiodigesterId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!selectedBiodigesterId && biodigestores.length > 0) {
+        setSelectedBiodigesterId(biodigestores[0].id);
+    }
+  }, [biodigestores, selectedBiodigesterId]);
+  
   const { evaluateAlerts } = useZustandStore(customAlertsStore);
   const { kpis: dashboardKpis } = useDashboardStore();
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboardData', timeRange],
-    queryFn: () => fetchDashboardData(timeRange),
+    queryKey: ['dashboardData', timeRange, selectedBiodigesterId],
+    queryFn: () => fetchDashboardData(timeRange, selectedBiodigesterId!),
+    enabled: !!selectedBiodigesterId,
   });
 
   useEffect(() => {
@@ -222,7 +242,7 @@ const HomePage: React.FC = () => {
     return 'operational';
   }, [kpiData]);
 
-  if (isLoading) {
+  if (isLoading || !selectedBiodigesterId) {
     return <Page><Card><CardContent><p className="text-center text-text-secondary p-4">Cargando dashboard...</p></CardContent></Card></Page>
   }
 
@@ -245,11 +265,24 @@ const HomePage: React.FC = () => {
   return (
     <Page>
       <div className="space-y-6">
-        <PlantStatusCard 
-            status={plantStatus}
-            fosTac={parseFloat(kpiData?.fosTac || '0')}
-            ch4={parseFloat(kpiData?.ch4 || '0')}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2">
+                <PlantStatusCard 
+                    status={plantStatus}
+                    fosTac={parseFloat(kpiData?.fosTac || '0')}
+                    ch4={parseFloat(kpiData?.ch4 || '0')}
+                />
+            </div>
+            <div>
+                <Label htmlFor="biodigester-select">Seleccionar Biodigestor</Label>
+                <Select id="biodigester-select" value={selectedBiodigesterId ?? ''} onChange={e => setSelectedBiodigesterId(Number(e.target.value))}>
+                    {biodigestores.map(b => (
+                        <option key={b.id} value={b.id}>{b.nombre_equipo}</option>
+                    ))}
+                </Select>
+                <p className="text-xs text-text-secondary mt-1">Los KPIs de proceso se actualizarán según su selección.</p>
+            </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {visibleKpis.map(kpi => <KpiCard key={kpi.title} {...kpi} />)}

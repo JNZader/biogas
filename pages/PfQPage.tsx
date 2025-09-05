@@ -47,14 +47,20 @@ const createAditivo = async (formData: AdditiveFormData) => {
     return { success: true };
 };
 
-const fetchAditivosHistory = async () => {
-    const { data, error } = await supabase
-        .from('aditivos_biodigestor')
-        .select(`*, equipos ( nombre_equipo )`)
+const fetchFosTacHistory = async (equipmentId?: number): Promise<FosTacHistoryItem[]> => {
+    let query = supabase
+        .from('analisis_fos_tac')
+        .select('*, equipos(nombre_equipo)')
         .order('fecha_hora', { ascending: false })
         .limit(15);
+
+    if (equipmentId) {
+        query = query.eq('equipo_id', equipmentId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
-    return data;
+    return data as any[] || [];
 };
 
 const fetchLastPhForEquipment = async (equipmentId: number) => {
@@ -79,7 +85,7 @@ const fetchLastPhForEquipment = async (equipmentId: number) => {
 // --- Feature Components ---
 type FosTacAnalysis = Database['public']['Tables']['analisis_fos_tac']['Row'];
 interface FosTacHistoryItem extends FosTacAnalysis {
-    equipo_nombre?: string;
+    equipos?: { nombre_equipo: string } | null;
 }
 
 type AditivoRecord = Database['public']['Tables']['aditivos_biodigestor']['Row'];
@@ -127,9 +133,6 @@ const FosTacCalculator: React.FC = () => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
     
-    const [history, setHistory] = useState<FosTacHistoryItem[]>([]);
-    const [historyLoading, setHistoryLoading] = useState(true);
-    const [historyError, setHistoryError] = useState<string | null>(null);
     const [results, setResults] = useState({ fos: 0, tac: 0, ratio: 0 });
     const [phInputKey, setPhInputKey] = useState(Date.now());
     
@@ -149,6 +152,12 @@ const FosTacCalculator: React.FC = () => {
     const vol1 = form.watch('vol1');
     const vol2 = form.watch('vol2');
     const selectedEquipmentId = form.watch('equipment');
+
+    const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({
+        queryKey: ['fosTacHistory', selectedEquipmentId],
+        queryFn: () => fetchFosTacHistory(selectedEquipmentId ? Number(selectedEquipmentId) : undefined),
+        enabled: !dataLoading,
+    });
 
     const { data: lastPhData } = useQuery({
         queryKey: ['lastPh', selectedEquipmentId],
@@ -184,46 +193,12 @@ const FosTacCalculator: React.FC = () => {
         });
     }, [vol1, vol2]);
     
-    const fetchHistory = useCallback(async () => {
-        if (!equipos || equipos.length === 0) return;
-        setHistoryLoading(true);
-        setHistoryError(null);
-        try {
-            const { data, error } = await supabase
-                .from('analisis_fos_tac')
-                .select('*')
-                .order('fecha_hora', { ascending: false })
-                .limit(15);
-
-            if (error) throw error;
-            const enrichedData = data.map(reading => {
-                const equipo = equipos.find(e => e.id === reading.equipo_id);
-                return {
-                    ...reading,
-                    equipo_nombre: equipo ? equipo.nombre_equipo : `ID: ${reading.equipo_id}`
-                };
-            });
-            setHistory(enrichedData);
-        } catch (err: any) {
-            setHistoryError(`Error al cargar el historial: ${err.message}`);
-        } finally {
-            setHistoryLoading(false);
-        }
-    }, [equipos]);
-
-    useEffect(() => {
-        if (!dataLoading) {
-            fetchHistory();
-        }
-    }, [dataLoading, fetchHistory]);
-    
     const mutation = useMutation({
         mutationFn: createFosTac,
         onSuccess: () => {
             toast({ title: 'Éxito', description: 'Análisis FOS/TAC guardado con éxito!' });
-            queryClient.invalidateQueries({ queryKey: ['fosTacHistory'] }); // Or a more specific key
+            queryClient.invalidateQueries({ queryKey: ['fosTacHistory'] });
             form.reset();
-            fetchHistory();
         },
         onError: (err: Error) => {
             toast({ title: 'Error', description: `Error: ${err.message}`, variant: 'destructive' });
@@ -237,7 +212,7 @@ const FosTacCalculator: React.FC = () => {
     const handleExport = () => {
         const dataToExport = history.map(item => ({
             fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
-            equipo: item.equipo_nombre,
+            equipo: item.equipos?.nombre_equipo || 'N/A',
             ph: item.ph,
             fos_mg_l: item.fos_mg_l?.toFixed(2) ?? 'N/A',
             tac_mg_l: item.tac_mg_l?.toFixed(2) ?? 'N/A',
@@ -349,7 +324,7 @@ const FosTacCalculator: React.FC = () => {
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (
-                      <p className="text-center text-error">{historyError}</p>
+                      <p className="text-center text-error">{(historyError as Error).message}</p>
                    ) : history.length === 0 ? (
                       <p className="text-center text-text-secondary py-4">No hay análisis registrados todavía.</p>
                    ) : (
@@ -368,7 +343,7 @@ const FosTacCalculator: React.FC = () => {
                                   {history.map(item => (
                                       <tr key={item.id}>
                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora).toLocaleString('es-AR')}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.equipo_nombre}</td>
+                                          <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.equipos?.nombre_equipo || 'N/A'}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary`}>{item.fos_mg_l?.toFixed(2) ?? 'N/A'}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary`}>{item.tac_mg_l?.toFixed(2) ?? 'N/A'}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary font-bold`}>{item.relacion_fos_tac?.toFixed(3) ?? 'N/A'}</td>
@@ -389,11 +364,6 @@ const Additives: React.FC = () => {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
-    const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({
-        queryKey: ['additivesHistory'],
-        queryFn: fetchAditivosHistory,
-    });
-
     const biodigestores = useMemo(() => 
         equipos.filter(e => e.nombre_equipo?.toLowerCase().includes('biodigestor')), 
     [equipos]);
@@ -406,6 +376,28 @@ const Additives: React.FC = () => {
             additive_quantity: undefined,
             additive_bio: '',
         },
+    });
+
+    const selectedBioId = form.watch('additive_bio');
+
+    const { data: history = [], isLoading: historyLoading, error: historyError } = useQuery({
+        queryKey: ['additivesHistory', selectedBioId],
+        queryFn: async () => {
+            let query = supabase
+                .from('aditivos_biodigestor')
+                .select(`*, equipos ( nombre_equipo )`)
+                .order('fecha_hora', { ascending: false })
+                .limit(15);
+            
+            if (selectedBioId) {
+                query = query.eq('equipo_id', Number(selectedBioId));
+            }
+            
+            const { data, error } = await query;
+            if (error) throw error;
+            return data;
+        },
+        enabled: !dataLoading,
     });
 
     const mutation = useMutation({

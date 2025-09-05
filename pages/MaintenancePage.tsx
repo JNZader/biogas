@@ -241,8 +241,10 @@ const Tasks: React.FC = () => {
         },
     });
 
-    // FIX: Correctly select and type the prefill data from the router state.
-    const prefillData = useRouterState({ select: s => (s.location.state as { prefillTask?: any } | undefined)?.prefillTask });
+    // FIX: The `select` option in `useRouterState` can have unstable type inference.
+    // Accessing the state directly from the hook's return value is more robust.
+    const routerState = useRouterState();
+    const prefillData = (routerState.location.state as { prefillTask?: any } | undefined)?.prefillTask;
 
     useEffect(() => {
         if (prefillData?.equipo_id) {

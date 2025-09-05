@@ -4,18 +4,21 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import Page from '../components/Page';
 import { useThemeColors } from '../stores/useThemeColors';
+import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
 import { format } from 'date-fns';
+import { Label } from '../components/ui/Label';
+import { Select } from '../components/ui/Select';
 
 
 // --- Co-located API Logic ---
-const fetchGraphData = async () => {
+const fetchGraphData = async (biodigesterId: number) => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const [fosTacRes, gasRes, substrateRes] = await Promise.all([
-        supabase.from('analisis_fos_tac').select('fecha_hora, fos_mg_l, tac_mg_l, relacion_fos_tac').not('relacion_fos_tac', 'is', null).order('fecha_hora', { ascending: true }).limit(10),
-        supabase.from('lecturas_gas').select('ch4_porcentaje, co2_porcentaje, o2_porcentaje, h2s_ppm').order('fecha_hora', { ascending: false }).limit(1).single(),
+        supabase.from('analisis_fos_tac').select('fecha_hora, fos_mg_l, tac_mg_l, relacion_fos_tac').eq('equipo_id', biodigesterId).not('relacion_fos_tac', 'is', null).order('fecha_hora', { ascending: true }).limit(10),
+        supabase.from('lecturas_gas').select('ch4_porcentaje, co2_porcentaje, o2_porcentaje, h2s_ppm').eq('equipo_id_fk', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).single(),
         supabase.from('detalle_ingreso_sustrato').select('cantidad_kg, sustratos ( nombre )').gte('created_at', sevenDaysAgo.toISOString())
     ]);
 
@@ -57,10 +60,20 @@ type RawSubstrateItem = {
 
 const GraphsPage: React.FC = () => {
     const themeColors = useThemeColors();
+    const { equipos } = useSupabaseData();
+    const biodigestores = useMemo(() => equipos.filter(e => e.categoria?.toLowerCase().includes('biodigestor')), [equipos]);
+    const [selectedBiodigesterId, setSelectedBiodigesterId] = React.useState<number | null>(null);
+
+    React.useEffect(() => {
+        if (!selectedBiodigesterId && biodigestores.length > 0) {
+            setSelectedBiodigesterId(biodigestores[0].id);
+        }
+    }, [biodigestores, selectedBiodigesterId]);
 
     const { data, isLoading, error } = useQuery({
-        queryKey: ['graphData'],
-        queryFn: fetchGraphData,
+        queryKey: ['graphData', selectedBiodigesterId],
+        queryFn: () => fetchGraphData(selectedBiodigesterId!),
+        enabled: !!selectedBiodigesterId,
     });
 
     const { fosTacData, gasCompositionData, substrateMixData } = useMemo(() => {
@@ -151,6 +164,15 @@ const GraphsPage: React.FC = () => {
 
   return (
     <Page>
+      <div className="mb-6 max-w-xs">
+        <Label htmlFor="biodigester-select">Seleccionar Biodigestor</Label>
+        <Select id="biodigester-select" value={selectedBiodigesterId ?? ''} onChange={e => setSelectedBiodigesterId(Number(e.target.value))} disabled={biodigestores.length === 0}>
+            {biodigestores.length === 0 && <option>Cargando biodigestores...</option>}
+            {biodigestores.map(b => (
+                <option key={b.id} value={b.id}>{b.nombre_equipo}</option>
+            ))}
+        </Select>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card>
           <CardHeader><CardTitle>Tendencia FOS/TAC</CardTitle></CardHeader>

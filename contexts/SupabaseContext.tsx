@@ -118,15 +118,16 @@ export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
     };
 
-    const { data: sustratos = [], isLoading: sustratosLoading, error: sustratosError } = useSharedQuery('sustratos', fetchSustratos);
-    const { data: proveedores = [], isLoading: proveedoresLoading, error: proveedoresError } = useSharedQuery('proveedores', fetchProveedores);
-    const { data: transportistas = [], isLoading: transportistasLoading, error: transportistasError } = useSharedQuery('transportistas', fetchTransportistas);
-    const { data: camiones = [], isLoading: camionesLoading, error: camionesError } = useSharedQuery('camiones', fetchCamiones);
-    const { data: lugaresDescarga = [], isLoading: lugaresDescargaLoading, error: lugaresDescargaError } = useSharedQuery('lugaresDescarga', fetchLugaresDescarga);
-    const { data: equipos = [], isLoading: equiposLoading, error: equiposError } = useSharedQuery('equipos', fetchEquipos);
-    const { data: tiposMantenimiento = [], isLoading: tiposMantenimientoLoading, error: tiposMantenimientoError } = useSharedQuery('tiposMantenimiento', fetchTiposMantenimiento);
-    const { data: subsistemas = [], isLoading: subsistemasLoading, error: subsistemasError } = useSharedQuery('subsistemas', fetchSubsistemas);
-    const { data: modulos = [], isLoading: modulosLoading, error: modulosError } = useSharedQuery('modulos', fetchModulos);
+    // FIX: Added explicit generic types to each useSharedQuery call to ensure data is correctly typed and not inferred as `unknown[]`.
+    const { data: sustratos = [], isLoading: sustratosLoading, error: sustratosError } = useSharedQuery<Sustrato>('sustratos', fetchSustratos);
+    const { data: proveedores = [], isLoading: proveedoresLoading, error: proveedoresError } = useSharedQuery<Empresa>('proveedores', fetchProveedores);
+    const { data: transportistas = [], isLoading: transportistasLoading, error: transportistasError } = useSharedQuery<Empresa>('transportistas', fetchTransportistas);
+    const { data: camiones = [], isLoading: camionesLoading, error: camionesError } = useSharedQuery<Camion>('camiones', fetchCamiones);
+    const { data: lugaresDescarga = [], isLoading: lugaresDescargaLoading, error: lugaresDescargaError } = useSharedQuery<LugarDescarga>('lugaresDescarga', fetchLugaresDescarga);
+    const { data: equipos = [], isLoading: equiposLoading, error: equiposError } = useSharedQuery<Equipo>('equipos', fetchEquipos);
+    const { data: tiposMantenimiento = [], isLoading: tiposMantenimientoLoading, error: tiposMantenimientoError } = useSharedQuery<TipoMantenimiento>('tiposMantenimiento', fetchTiposMantenimiento);
+    const { data: subsistemas = [], isLoading: subsistemasLoading, error: subsistemasError } = useSharedQuery<Subsistema>('subsistemas', fetchSubsistemas);
+    const { data: modulos = [], isLoading: modulosLoading, error: modulosError } = useSharedQuery<Modulo>('modulos', fetchModulos);
 
     const loading = authLoading || sustratosLoading || proveedoresLoading || transportistasLoading || camionesLoading || lugaresDescargaLoading || equiposLoading || tiposMantenimientoLoading || subsistemasLoading || modulosLoading;
     const error = [sustratosError, proveedoresError, transportistasError, camionesError, lugaresDescargaError, equiposError, tiposMantenimientoError, subsistemasError, modulosError]
@@ -138,7 +139,7 @@ export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ 
         queryClient.invalidateQueries();
     }, [queryClient]);
 
-    const value = {
+    const value: SupabaseDataContextType = {
         sustratos,
         proveedores,
         transportistas,
