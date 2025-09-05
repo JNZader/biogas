@@ -18,21 +18,20 @@ import { useStore as useZustandStore } from 'zustand';
 import { customAlertsStore } from '../stores/customAlertsStore';
 import { useDashboardStore } from '../stores/dashboardStore';
 import { useSupabaseData } from '../contexts/SupabaseContext';
+import type { Database } from '../types/database';
 
 // --- Co-located API Logic ---
-const fetchDashboardData = async (timeRange: number, biodigesterId: number) => {
-    const baseKpiQuery = (table: string, column: string) =>
-        supabase.from(table).select(column).eq('equipo_id', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle();
-    
-    // The gas quality query uses a different foreign key column name.
-    const gasKpiQuery = (table: string, column: string) =>
-        supabase.from(table).select(column).eq('equipo_id_fk', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle();
+// FIX: Typed the 'table' parameter to be a valid table name from the database schema to satisfy Supabase's typed client.
+type TableName = keyof Database['public']['Tables'];
 
+const fetchDashboardData = async (timeRange: number, biodigesterId: number) => {
+    // FIX: Removed generic helper functions that were causing a "Type instantiation is excessively deep" error.
+    // Replaced them with direct Supabase calls for clearer type inference.
     const [kpiResults, chartRes] = await Promise.all([
         Promise.all([
             supabase.from('energia').select('generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').order('fecha', { ascending: false }).limit(1).maybeSingle(),
-            baseKpiQuery('analisis_fos_tac', 'relacion_fos_tac'),
-            gasKpiQuery('lecturas_gas', 'ch4_porcentaje'),
+            supabase.from('analisis_fos_tac').select('relacion_fos_tac').eq('equipo_id', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle(),
+            supabase.from('lecturas_gas').select('ch4_porcentaje').eq('equipo_id_fk', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle(),
         ]),
         supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').gte('fecha', new Date(Date.now() - timeRange * 24 * 60 * 60 * 1000).toISOString().split('T')[0]).order('fecha', { ascending: true }),
     ]);
@@ -45,6 +44,7 @@ const fetchDashboardData = async (timeRange: number, biodigesterId: number) => {
     const kpiData = {
         generacion: ((energiaRes.data?.generacion_electrica_total_kwh_dia || 0) / 1000).toFixed(1),
         biogas: (energiaRes.data?.flujo_biogas_kg_dia || 0).toLocaleString('es-AR'),
+        // FIX: Type inference is now correct after removing the problematic generic helper functions, resolving the property access errors.
         fosTac: (fosTacRes.data?.relacion_fos_tac || 0).toFixed(2),
         ch4: (gasRes.data?.ch4_porcentaje || 0).toFixed(1),
     };

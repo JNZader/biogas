@@ -67,15 +67,16 @@ if (supabaseUrl && supabaseAnonKey) {
             },
         };
     }),
-    energia: Array.from({ length: 7 }, (_, i) => {
+    energia: Array.from({ length: 30 }, (_, i) => {
         const date = new Date();
-        date.setDate(date.getDate() - (6 - i));
+        date.setDate(date.getDate() - (29 - i));
         return {
             id: i + 1,
             fecha: date.toISOString().split('T')[0],
             generacion_electrica_total_kwh_dia: 12000 + Math.floor(Math.random() * 2000),
             flujo_biogas_kg_dia: 8000 + Math.floor(Math.random() * 1500),
             horas_funcionamiento_motor_chp_dia: 22 + Math.random() * 2,
+            autoconsumo_porcentaje: 10 + Math.random() * 5,
         };
     }),
     analisis_fos_tac: Array.from({ length: 15 }, (_, i) => {
@@ -377,25 +378,35 @@ if (supabaseUrl && supabaseAnonKey) {
   supabase = {
     from: (tableName: string) => mockQueryBuilder(tableName, mockDatabase[tableName] || []),
     auth: {
-      session: () => ({
-        user: { id: 'mock-user-uuid-12345', email: 'juan.perez@example.com' },
-        access_token: 'mock-token',
-        token_type: 'bearer',
-      } as any),
-      onAuthStateChange: () => {
-          return { data: { subscription: { unsubscribe: () => {} } } };
+      getSession: () => {
+        const mockSession = {
+          user: { id: 'mock-user-uuid-12345', email: 'juan.perez@example.com' },
+          access_token: 'mock-token',
+          token_type: 'bearer',
+        };
+        return Promise.resolve({ data: { session: mockSession as any }, error: null });
+      },
+      onAuthStateChange: (callback) => {
+        // Immediately call the callback with a mock session to simulate a logged-in user
+        const mockSession = {
+            user: { id: 'mock-user-uuid-12345', email: 'juan.perez@example.com' },
+            access_token: 'mock-token',
+            token_type: 'bearer',
+        };
+        callback('INITIAL_SESSION', mockSession as any);
+        return { data: { subscription: { unsubscribe: () => {} } } };
       },
       signOut: () => Promise.resolve({ error: null }),
-      signIn: ({ email, password }) => {
+      signInWithPassword: ({ email, password }) => {
         if (email === 'juan.perez@example.com' && password === 'password') {
-            return Promise.resolve({ user: { id: 'mock-user-uuid-12345', email: 'juan.perez@example.com' }, session: {} as any, error: null });
+            const mockUser = { id: 'mock-user-uuid-12345', email: 'juan.perez@example.com' };
+            const mockSession = { user: mockUser, access_token: 'mock-token', token_type: 'bearer' };
+            return Promise.resolve({ data: { user: mockUser as any, session: mockSession as any }, error: null });
         }
-        return Promise.resolve({ user: null, session: null, error: { message: 'Invalid credentials' } });
+        return Promise.resolve({ data: { user: null, session: null }, error: { message: 'Invalid credentials' } });
       },
-      update: (data) => Promise.resolve({ user: {id: 'mock-user-uuid-12345', email: 'juan.perez@example.com', ...data} as any, error: null }),
-      api: {
-          sendPasswordRestEmail: () => Promise.resolve({ data: {}, error: null })
-      }
+      updateUser: (data) => Promise.resolve({ data: { user: {id: 'mock-user-uuid-12345', email: 'juan.perez@example.com', ...data} as any }, error: null }),
+      resetPasswordForEmail: () => Promise.resolve({ data: {}, error: null })
     },
   } as any;
 }

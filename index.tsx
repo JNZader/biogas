@@ -1,5 +1,6 @@
 import React, { lazy } from 'react';
 import ReactDOM from 'react-dom/client';
+// FIX: Removed unused `AnyRoute` import.
 import { RouterProvider, createRouter, createRootRoute, createRoute, createHashHistory } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { QueryClient } from '@tanstack/query-core';
@@ -44,35 +45,61 @@ const rootRoute = createRootRoute({
   component: App,
 });
 
-// FIX: The cryptic "strictNullChecks" error from TanStack Router often points to an invalid route tree.
-// By extracting the route tree into a constant with `as const`, we prevent TypeScript from widening the
-// complex generic type before it's passed to `createRouter`, resolving the inference issue.
-const routeTree = rootRoute.addChildren([
-  createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/forgot-password', component: ForgotPasswordPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/update-password', component: UpdatePasswordPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/graphs', component: GraphsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/feeding', component: FeedingPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/inputs', component: InputsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/gas-quality', component: GasQualityPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/laboratory', component: LaboratoryPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/pfq', component: PfQPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/environment', component: EnvironmentPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/energy', component: EnergyRegistryPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/chp', component: ChpControlPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/maintenance', component: MaintenancePage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/stock', component: StockPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/more', component: MorePage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/profile-settings', component: ProfileSettingsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/management', component: ManagementPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/alarms', component: AlarmsPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/user-management', component: UserManagementPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/change-password', component: ChangePasswordPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/error-detective', component: ErrorDetectivePage }),
-] as const);
+// FIX: The cryptic "strictNullChecks" error from TanStack Router often points to an invalid route tree,
+// sometimes caused by TypeScript's inability to infer a very large, complex, inline type.
+// By defining each route as a separate constant, we break down the complexity and help the
+// type inference engine correctly resolve the final `routeTree` type.
+const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomePage });
+const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginPage });
+const forgotPasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/forgot-password', component: ForgotPasswordPage });
+const updatePasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/update-password', component: UpdatePasswordPage });
+const graphsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/graphs', component: GraphsPage });
+const feedingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/feeding', component: FeedingPage });
+const inputsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/inputs', component: InputsPage });
+const gasQualityRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gas-quality', component: GasQualityPage });
+const laboratoryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/laboratory', component: LaboratoryPage });
+const pfqRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pfq', component: PfQPage });
+const environmentRoute = createRoute({ getParentRoute: () => rootRoute, path: '/environment', component: EnvironmentPage });
+const energyRoute = createRoute({ getParentRoute: () => rootRoute, path: '/energy', component: EnergyRegistryPage });
+const chpRoute = createRoute({ getParentRoute: () => rootRoute, path: '/chp', component: ChpControlPage });
+const maintenanceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/maintenance', component: MaintenancePage });
+const stockRoute = createRoute({ getParentRoute: () => rootRoute, path: '/stock', component: StockPage });
+const moreRoute = createRoute({ getParentRoute: () => rootRoute, path: '/more', component: MorePage });
+const profileSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/profile-settings', component: ProfileSettingsPage });
+const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupPage });
+const managementRoute = createRoute({ getParentRoute: () => rootRoute, path: '/management', component: ManagementPage });
+const alarmsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/alarms', component: AlarmsPage });
+const userManagementRoute = createRoute({ getParentRoute: () => rootRoute, path: '/user-management', component: UserManagementPage });
+const changePasswordRoute = createRoute({ getParentRoute: () => rootRoute, path: '/change-password', component: ChangePasswordPage });
+const errorDetectiveRoute = createRoute({ getParentRoute: () => rootRoute, path: '/error-detective', component: ErrorDetectivePage });
 
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  forgotPasswordRoute,
+  updatePasswordRoute,
+  graphsRoute,
+  feedingRoute,
+  inputsRoute,
+  gasQualityRoute,
+  laboratoryRoute,
+  pfqRoute,
+  environmentRoute,
+  energyRoute,
+  chpRoute,
+  maintenanceRoute,
+  stockRoute,
+  moreRoute,
+  profileSettingsRoute,
+  setupRoute,
+  managementRoute,
+  alarmsRoute,
+  userManagementRoute,
+  changePasswordRoute,
+  errorDetectiveRoute,
+]);
+
+// FIX: Removed the `basepath` option, which can cause type inference issues with TanStack Router, especially when using hash-based routing.
 const router = createRouter({
   routeTree,
   history: createHashHistory(),

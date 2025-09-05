@@ -28,8 +28,8 @@ const ForgotPasswordPage: React.FC = () => {
     const { isSubmitting, isSubmitSuccessful } = form.formState;
 
     const onSubmit = async (data: ForgotPasswordFormData) => {
-        // FIX: Replaced 'resetPasswordForEmail' with the older 'api.sendPasswordRestEmail' method to align with the Supabase Auth v1 API, resolving the 'property does not exist' error.
-        const { error } = await supabase.auth.api.sendPasswordRestEmail(data.email, {
+        // FIX: Replaced 'api.sendPasswordRestEmail' with the current 'resetPasswordForEmail' method to align with the Supabase Auth v2 API, resolving the 'property does not exist' error.
+        const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
              redirectTo: `${window.location.origin}${window.location.pathname}#/update-password`,
         });
 
