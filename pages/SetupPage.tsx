@@ -1,233 +1,392 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-
-import React, { useState, useEffect } from 'react';
 import Page from '../components/Page';
-import { Card, CardContent } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
-import { TrashIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/Dialog';
+import { TrashIcon, PencilIcon, PlusCircleIcon } from '@heroicons/react/24/outline';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/use-toast';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
+import { DataTable } from '../components/ui/DataTable';
+import { Textarea } from '../components/ui/Textarea';
+import type { Database } from '../types/database';
 
-const SetupPage: React.FC = () => {
-    const { equipos, loading: dataLoading, refreshData } = useSupabaseData();
-    const [isModalOpen, setIsModalOpen] = useState(false);
+type Equipo = Database['public']['Tables']['equipos']['Row'];
+type Area = Database['public']['Tables']['areas_planta']['Row'];
+type Subsistema = Database['public']['Tables']['subsistemas']['Row'];
 
-    // State for plant details form
-    const [plantDetails, setPlantDetails] = useState({
-        nombre_planta: '',
-        ubicacion: '',
-        configuracion: { capacity: '', digester_type: '' } as { capacity: string; digester_type: string; } | any,
+// --- Co-located Components for Tabs ---
+
+const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 focus:outline-none ${
+        active
+          ? 'border-b-2 border-primary text-primary bg-primary/10'
+          : 'text-text-secondary hover:text-text-primary'
+      }`}
+    >
+      {children}
+    </button>
+);
+
+const plantDetailsSchema = z.object({
+    nombre_planta: z.string().min(1, "El nombre es requerido."),
+    ubicacion: z.string().optional(),
+    capacity: z.coerce.number().positive().optional(),
+    digester_type: z.string().optional(),
+});
+type PlantDetailsFormData = z.infer<typeof plantDetailsSchema>;
+
+const PlantDetails: React.FC<{ plantaId: number }> = ({ plantaId }) => {
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+
+    const { data: plantData, isLoading: isPlantLoading } = useQuery({
+        queryKey: ['planta', plantaId],
+        queryFn: async () => {
+            const { data, error } = await supabase.from('plantas').select('*').eq('id', plantaId).single();
+            if (error) throw error;
+            return data;
+        },
     });
-    const [plantLoading, setPlantLoading] = useState(true);
-    const [plantSaving, setPlantSaving] = useState(false);
-    const [message, setMessage] = useState('');
+    
+    // FIX: Replaced the `values` prop with `defaultValues` and a `useEffect` with `form.reset` to prevent complex type inference issues and ensure the form initializes correctly.
+    const form = useForm<PlantDetailsFormData>({
+        resolver: zodResolver(plantDetailsSchema),
+        defaultValues: {
+            nombre_planta: '',
+            ubicacion: '',
+            capacity: undefined,
+            digester_type: '',
+        }
+    });
 
     useEffect(() => {
-        const fetchPlantData = async () => {
-            setPlantLoading(true);
-            try {
-                // Hardcoded plant ID 1 for this demo app
-                const { data, error } = await supabase.from('plantas').select('*').eq('id', 1).single();
-                if (error && error.code !== 'PGRST116') throw error; // Ignore "No rows found" error
-                if (data) {
-                    setPlantDetails({
-                        nombre_planta: data.nombre_planta || '',
-                        ubicacion: data.ubicacion || '',
-                        configuracion: data.configuracion || { capacity: '', digester_type: '' },
-                    });
-                }
-            } catch (error: any) {
-                setMessage(`Error al cargar datos de la planta: ${error.message}`);
-            } finally {
-                setPlantLoading(false);
-            }
-        };
-        fetchPlantData();
-    }, []);
-    
-    const handlePlantDetailsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { id, value } = e.target;
-        if (id === 'plant_name' || id === 'location') {
-            setPlantDetails(prev => ({ ...prev, [id === 'plant_name' ? 'nombre_planta' : 'ubicacion']: value }));
-        } else { // 'capacity' or 'digester_type'
-            setPlantDetails(prev => ({
-                ...prev,
-                configuracion: { ...prev.configuracion, [id]: value }
-            }));
+        if (plantData) {
+            form.reset({
+                nombre_planta: plantData.nombre_planta || '',
+                ubicacion: plantData.ubicacion || '',
+                capacity: (plantData.configuracion as any)?.capacity != null ? Number((plantData.configuracion as any).capacity) : undefined,
+                digester_type: (plantData.configuracion as any)?.digester_type || '',
+            });
         }
-    };
-    
-    const handleSavePlantDetails = async () => {
-        setPlantSaving(true);
-        setMessage('');
-        try {
-            const { error } = await supabase
-                .from('plantas')
-                .update({
-                    nombre_planta: plantDetails.nombre_planta,
-                    ubicacion: plantDetails.ubicacion,
-                    configuracion: plantDetails.configuracion
-                })
-                .eq('id', 1); // Hardcoded plant ID 1
+    }, [plantData, form]);
+
+    const mutation = useMutation({
+        mutationFn: async (formData: PlantDetailsFormData) => {
+            const { error } = await supabase.from('plantas').update({
+                nombre_planta: formData.nombre_planta,
+                ubicacion: formData.ubicacion,
+                configuracion: { capacity: formData.capacity, digester_type: formData.digester_type }
+            }).eq('id', plantaId);
             if (error) throw error;
-            setMessage('Configuración de la planta guardada con éxito.');
-        } catch (error: any) {
-            setMessage(`Error al guardar: ${error.message}`);
-        } finally {
-            setPlantSaving(false);
+        },
+        onSuccess: () => {
+            toast({ title: 'Éxito', description: 'Detalles de la planta actualizados.' });
+            queryClient.invalidateQueries({ queryKey: ['planta', plantaId] });
+        },
+        onError: (err: Error) => {
+            toast({ title: 'Error', description: err.message, variant: 'destructive' });
         }
-    };
-
-
-    const handleAddEquipment = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        const formData = new FormData(event.currentTarget);
-        
-        const newEquipment = {
-            nombre_equipo: formData.get('name') as string,
-            categoria: formData.get('type') as string,
-            codigo_equipo: (formData.get('code') as string) || null,
-            planta_id: 1, // Hardcoded plant ID
-            especificaciones_tecnicas: {
-                area: formData.get('area') as string,
-                capacityValue: formData.get('capacityValue') as string,
-                capacityUnit: formData.get('capacityUnit') as string,
-            }
-        };
-
-        try {
-            const { error } = await supabase.from('equipos').insert(newEquipment);
-            if (error) throw error;
-            await refreshData();
-            setIsModalOpen(false);
-            event.currentTarget.reset();
-        } catch(error: any) {
-            alert(`Error al añadir equipo: ${error.message}`);
-        }
-    };
-
-    const handleRemoveEquipment = async (id: number) => {
-        if(window.confirm('¿Está seguro de que desea eliminar este equipo?')) {
-            try {
-                const { error } = await supabase.from('equipos').delete().eq('id', id);
-                if (error) throw error;
-                await refreshData();
-            } catch (error: any) {
-                alert(`Error al eliminar equipo: ${error.message}`);
-            }
-        }
-    };
-    
-    const commonInputClasses = "mt-1 block w-full px-3 py-2 bg-surface border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm";
+    });
 
     return (
-        <ProtectedRoute requiredPermission="setup">
-            <Page className="space-y-6">
-                <h1 className="text-2xl font-bold text-text-primary">Configuración Inicial de la Planta</h1>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <h2 className="text-lg font-semibold text-text-primary mb-4">1. Detalles de la Planta</h2>
-                        {plantLoading ? <p>Cargando detalles de la planta...</p> : (
-                            <form className="space-y-4">
-                                <div><Label htmlFor="plant_name">Nombre de la Planta</Label><Input id="plant_name" type="text" placeholder="Ej: Planta de Biogás 'El Progreso'" value={plantDetails.nombre_planta} onChange={handlePlantDetailsChange} className={commonInputClasses} /></div>
-                                <div><Label htmlFor="location">Ubicación</Label><Input id="location" type="text" placeholder="Ej: Ruta 5, km 123, Provincia" value={plantDetails.ubicacion || ''} onChange={handlePlantDetailsChange} className={commonInputClasses}/></div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <Label htmlFor="capacity">Capacidad Digestor (m³)</Label>
-                                        <Input id="capacity" type="number" min="0" placeholder="5000" value={plantDetails.configuracion?.capacity || ''} onChange={handlePlantDetailsChange} className={commonInputClasses} />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="digester_type">Tipo de Digestor</Label>
-                                        <Select id="digester_type" value={plantDetails.configuracion?.digester_type || ''} onChange={handlePlantDetailsChange} className={commonInputClasses}>
-                                            {['', 'CSTR (Mezcla Completa)', 'Flujo Pistón', 'UASB', 'Otro'].map(opt => <option key={opt} value={opt}>{opt || 'Seleccione...'}</option>)}
-                                        </Select>
-                                    </div>
-                                </div>
-                            </form>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-lg font-semibold text-text-primary">2. Equipos de la Planta</h2>
-                            <Button variant="secondary" onClick={() => setIsModalOpen(true)} className="w-auto px-4 py-2 text-sm">Añadir Equipo</Button>
-                        </div>
-                        <p className="text-sm text-text-secondary mb-4">Añada los equipos principales de su planta, como biodigestores, bombas, sopladores y generadores.</p>
-                        
-                        <div className="space-y-3">
-                            {dataLoading ? <p>Cargando equipos...</p> : equipos.length === 0 ? (
-                                <div className="text-center py-6 border-2 border-dashed border-gray-300 rounded-lg">
-                                    <WrenchScrewdriverIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                    <h3 className="mt-2 text-sm font-medium text-gray-900">No hay equipos</h3>
-                                    <p className="mt-1 text-sm text-gray-500">Comience a añadir equipos a su planta.</p>
-                                </div>
-                            ) : (
-                                <ul className="divide-y divide-gray-200">
-                                    {equipos.map(eq => (
-                                        <li key={eq.id} className="py-3 flex items-center justify-between">
-                                            <div>
-                                                <p className="text-sm font-medium text-text-primary">{eq.nombre_equipo} <span className="text-xs text-text-secondary">({eq.codigo_equipo || 'N/A'})</span></p>
-                                                <p className="text-sm text-text-secondary">{eq.categoria} - {(eq.especificaciones_tecnicas as any)?.area}</p>
-                                                {(eq.especificaciones_tecnicas as any)?.capacityValue && (
-                                                    <p className="text-sm text-accent font-semibold">{(eq.especificaciones_tecnicas as any)?.capacityValue} {(eq.especificaciones_tecnicas as any)?.capacityUnit}</p>
-                                                )}
-                                            </div>
-                                            <button onClick={() => handleRemoveEquipment(eq.id)} className="p-2 rounded-full hover:bg-red-50">
-                                                <TrashIcon className="h-5 w-5 text-red-500" />
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-                
-                {message && <div className={`p-3 rounded-md text-sm my-4 ${message.startsWith('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{message}</div>}
-
-                <Button variant="default" isLoading={plantSaving} onClick={handleSavePlantDetails}>Guardar Configuración</Button>
-
-                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Añadir Nuevo Equipo</DialogTitle>
-                        </DialogHeader>
-                        <form onSubmit={handleAddEquipment} className="space-y-4 px-6 pb-6">
-                            <div><Label htmlFor="name">Nombre del Equipo</Label><Input id="name" name="name" type="text" placeholder="Ej: Biodigestor Principal" required className={commonInputClasses}/></div>
-                            <div>
-                                <Label htmlFor="type">Tipo de Equipo</Label>
-                                <Select id="type" name="type" required className={commonInputClasses}>
-                                    {['Biodigestor', 'Bomba', 'Agitador', 'Generador (CHP)', 'Soplador', 'Analizador de Gas', 'Otro'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </Select>
+        <Card>
+            <CardHeader><CardTitle>Detalles Generales de la Planta</CardTitle></CardHeader>
+            <CardContent>
+                 {isPlantLoading ? <p>Cargando...</p> : (
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+                            <FormField control={form.control} name="nombre_planta" render={({ field }) => (
+                                <FormItem><FormLabel>Nombre de la Planta</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )}/>
+                            <FormField control={form.control} name="ubicacion" render={({ field }) => (
+                                <FormItem><FormLabel>Ubicación</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                            )}/>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField control={form.control} name="capacity" render={({ field }) => (
+                                    <FormItem><FormLabel>Capacidad Digestor (m³)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                 <FormField control={form.control} name="digester_type" render={({ field }) => (
+                                    <FormItem><FormLabel>Tipo de Digestor</FormLabel><FormControl><Select {...field}><option value="">Seleccione...</option>{['CSTR (Mezcla Completa)', 'Flujo Pistón', 'UASB', 'Otro'].map(opt => <option key={opt} value={opt}>{opt}</option>)}</Select></FormControl><FormMessage /></FormItem>
+                                )}/>
                             </div>
-                            <div>
-                                <Label htmlFor="area">Área de la Planta</Label>
-                                <Select id="area" name="area" required className={commonInputClasses}>
-                                    {['Recepción', 'Pre-tratamiento', 'Digestión', 'Post-tratamiento', 'Generación de Energía'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </Select>
-                            </div>
-                            <div><Label htmlFor="code">Código / Tag (Opcional)</Label><Input id="code" name="code" type="text" placeholder="Ej: M-001" className={commonInputClasses} /></div>
-
-                            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-200">
-                                <div><Label htmlFor="capacityValue">Valor de Capacidad</Label><Input id="capacityValue" name="capacityValue" type="number" min="0" placeholder="5000" className={commonInputClasses}/></div>
-                                <div><Label htmlFor="capacityUnit">Unidad</Label><Input id="capacityUnit" name="capacityUnit" type="text" placeholder="m³, kW, kg/h" className={commonInputClasses}/></div>
-                            </div>
-
-                            <div className="flex justify-end space-x-3 pt-4">
-                                <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)} className="w-auto bg-gray-200 text-gray-700 hover:bg-gray-300">Cancelar</Button>
-                                <Button type="submit" variant="default" className="w-auto">Guardar Equipo</Button>
-                            </div>
+                            <Button type="submit" isLoading={mutation.isPending}>Guardar Detalles</Button>
                         </form>
-                    </DialogContent>
-                </Dialog>
+                    </Form>
+                 )}
+            </CardContent>
+        </Card>
+    );
+};
+
+const equipmentSchema = z.object({
+    nombre_equipo: z.string().min(1, "El nombre es requerido."),
+    categoria: z.string().optional(),
+    codigo_equipo: z.string().optional(),
+});
+type EquipmentFormData = z.infer<typeof equipmentSchema>;
+
+const EquipmentManagement: React.FC<{ plantaId: number }> = ({ plantaId }) => {
+    const { equipos, refreshData } = useSupabaseData();
+    const { toast } = useToast();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
+    const [currentItem, setCurrentItem] = useState<Equipo | null>(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+    const form = useForm<EquipmentFormData>({
+        resolver: zodResolver(equipmentSchema),
+    });
+
+    const mutation = useMutation({
+        mutationFn: async ({ mode, data, id }: { mode: 'add' | 'edit' | 'delete', data?: any, id?: number }) => {
+            if (mode === 'add') {
+                const { error } = await supabase.from('equipos').insert({ ...data, planta_id: plantaId });
+                if (error) throw error;
+            } else if (mode === 'edit' && id) {
+                const { error } = await supabase.from('equipos').update(data).eq('id', id);
+                if (error) throw error;
+            } else if (mode === 'delete' && id) {
+                const { error } = await supabase.from('equipos').delete().eq('id', id);
+                if (error) throw error;
+            }
+        },
+        onSuccess: () => {
+            toast({ title: 'Éxito', description: 'Operación realizada con éxito.' });
+            refreshData();
+            setIsModalOpen(false);
+            setIsDeleteModalOpen(false);
+        },
+        onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    });
+
+    const handleOpenModal = (mode: 'add' | 'edit', item: Equipo | null = null) => {
+        setModalMode(mode);
+        setCurrentItem(item);
+        form.reset(mode === 'edit' ? item : { nombre_equipo: '', categoria: '', codigo_equipo: '' });
+        setIsModalOpen(true);
+    };
+
+    const onSubmit = (data: EquipmentFormData) => {
+        mutation.mutate({ mode: modalMode, data, id: currentItem?.id });
+    };
+
+    const handleDelete = (item: Equipo) => {
+        setCurrentItem(item);
+        setIsDeleteModalOpen(true);
+    };
+
+    const columns = useMemo(() => [
+        { header: 'Nombre', accessorKey: 'nombre_equipo' as keyof Equipo },
+        { header: 'Categoría', accessorKey: 'categoria' as keyof Equipo },
+        { header: 'Código', accessorKey: 'codigo_equipo' as keyof Equipo },
+    ], []);
+
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle>Gestión de Equipos</CardTitle>
+                    <Button onClick={() => handleOpenModal('add')}><PlusCircleIcon className="h-5 w-5 mr-2" /> Crear Equipo</Button>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <DataTable columns={columns} data={equipos} onEdit={(item) => handleOpenModal('edit', item)} onDelete={handleDelete} />
+            </CardContent>
+
+            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>{modalMode === 'add' ? 'Crear' : 'Editar'} Equipo</DialogTitle></DialogHeader>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 px-6 pb-6">
+                            <FormField control={form.control} name="nombre_equipo" render={({ field }) => (<FormItem><FormLabel>Nombre</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="categoria" render={({ field }) => (<FormItem><FormLabel>Categoría</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="codigo_equipo" render={({ field }) => (<FormItem><FormLabel>Código</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <DialogFooter><Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button><Button type="submit" isLoading={mutation.isPending}>Guardar</Button></DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>Confirmar Eliminación</DialogTitle></DialogHeader>
+                    <div className="p-6">¿Seguro que quieres eliminar el equipo "{currentItem?.nombre_equipo}"?</div>
+                    <DialogFooter><Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>Cancelar</Button><Button variant="destructive" onClick={() => mutation.mutate({ mode: 'delete', id: currentItem?.id })} isLoading={mutation.isPending}>Eliminar</Button></DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </Card>
+    );
+};
+
+const areaSchema = z.object({ nombre_area: z.string().min(1, 'El nombre es requerido'), descripcion: z.string().optional() });
+const subsistemaSchema = z.object({ nombre_subsistema: z.string().min(1, 'El nombre es requerido'), descripcion: z.string().optional() });
+
+const AreasManagement: React.FC<{ plantaId: number }> = ({ plantaId }) => {
+    const { areasPlanta, subsistemas, refreshData } = useSupabaseData();
+    const { toast } = useToast();
+
+    const [isAreaModalOpen, setAreaModalOpen] = useState(false);
+    const [areaModalMode, setAreaModalMode] = useState<'add' | 'edit'>('add');
+    const [currentArea, setCurrentArea] = useState<Area | null>(null);
+    
+    const [isSubsystemModalOpen, setIsSubsystemModalOpen] = useState(false);
+    const [subsystemModalMode, setSubsystemModalMode] = useState<'add' | 'edit'>('add');
+    const [currentSubsystem, setCurrentSubsystem] = useState<Subsistema | null>(null);
+    const [parentAreaId, setParentAreaId] = useState<number | null>(null);
+
+    const areaForm = useForm({ resolver: zodResolver(areaSchema) });
+    const subsystemForm = useForm({ resolver: zodResolver(subsistemaSchema) });
+
+    const mutation = useMutation({
+        mutationFn: async ({ entity, mode, data, id }: { entity: 'area' | 'subsistema', mode: 'add' | 'edit' | 'delete', data?: any, id?: number }) => {
+            const tableName = entity === 'area' ? 'areas_planta' : 'subsistemas';
+            if (mode === 'add') {
+                const { error } = await supabase.from(tableName).insert(data);
+                if (error) throw error;
+            } else if (mode === 'edit' && id) {
+                const { error } = await supabase.from(tableName).update(data).eq('id', id);
+                if (error) throw error;
+            } else if (mode === 'delete' && id) {
+                const { error } = await supabase.from(tableName).delete().eq('id', id);
+                if (error) throw error;
+            }
+        },
+        onSuccess: () => {
+            toast({ title: 'Éxito', description: 'Operación realizada con éxito.' });
+            refreshData();
+            // FIX: Corrected typo from `setIsAreaModalOpen` to `setAreaModalOpen`.
+            setAreaModalOpen(false);
+            setIsSubsystemModalOpen(false);
+            setCurrentArea(null);
+            setCurrentSubsystem(null);
+        },
+        onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    });
+    
+    const handleOpenAreaModal = (mode: 'add' | 'edit', area: Area | null = null) => {
+        setAreaModalMode(mode);
+        setCurrentArea(area);
+        areaForm.reset(mode === 'edit' ? area : { nombre_area: '', descripcion: '' });
+        setIsAreaModalOpen(true);
+    };
+
+    const handleOpenSubsystemModal = (mode: 'add' | 'edit', parentId: number, subsistema: Subsistema | null = null) => {
+        setSubsystemModalMode(mode);
+        setParentAreaId(parentId);
+        setCurrentSubsystem(subsistema);
+        subsystemForm.reset(mode === 'edit' ? subsistema : { nombre_subsistema: '', descripcion: '' });
+        setIsSubsystemModalOpen(true);
+    };
+    
+    const onAreaSubmit = (data: z.infer<typeof areaSchema>) => {
+        const dataToSubmit = { ...data, planta_id: plantaId };
+        mutation.mutate({ entity: 'area', mode: areaModalMode, data: dataToSubmit, id: currentArea?.id });
+    };
+
+    const onSubsystemSubmit = (data: z.infer<typeof subsistemaSchema>) => {
+        const dataToSubmit = { ...data, area_id: parentAreaId };
+        mutation.mutate({ entity: 'subsistema', mode: subsystemModalMode, data: dataToSubmit, id: currentSubsystem?.id });
+    };
+
+    return (
+        <div>
+            <div className="flex justify-end mb-4">
+                <Button onClick={() => handleOpenAreaModal('add')}><PlusCircleIcon className="h-5 w-5 mr-2" /> Crear Área</Button>
+            </div>
+            <div className="space-y-4">
+                {areasPlanta.map(area => (
+                    <Card key={area.id}>
+                        <CardHeader className="flex flex-row justify-between items-center">
+                            <CardTitle>{area.nombre_area}</CardTitle>
+                            <div className="space-x-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleOpenAreaModal('edit', area)}><PencilIcon className="h-5 w-5" /></Button>
+                                <Button variant="ghost" size="icon" className="text-error" onClick={() => { setCurrentArea(area); mutation.mutate({ entity: 'area', mode: 'delete', id: area.id })}}><TrashIcon className="h-5 w-5" /></Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                            <Button variant="outline" size="sm" onClick={() => handleOpenSubsystemModal('add', area.id)}><PlusCircleIcon className="h-4 w-4 mr-1" /> Añadir Subsistema</Button>
+                            {subsistemas.filter(s => s.area_id === area.id).map(sub => (
+                                <div key={sub.id} className="flex items-center justify-between p-2 bg-background rounded-md">
+                                    <p>{sub.nombre_subsistema}</p>
+                                    <div className="space-x-1">
+                                         <Button variant="ghost" size="icon" onClick={() => handleOpenSubsystemModal('edit', area.id, sub)}><PencilIcon className="h-4 w-4" /></Button>
+                                         <Button variant="ghost" size="icon" className="text-error" onClick={() => mutation.mutate({ entity: 'subsistema', mode: 'delete', id: sub.id })}><TrashIcon className="h-4 w-4" /></Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
+            {/* FIX: Corrected typo from `setIsAreaModalOpen` to `setAreaModalOpen`. */}
+            <Dialog open={isAreaModalOpen} onOpenChange={setAreaModalOpen}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>{areaModalMode === 'add' ? 'Crear' : 'Editar'} Área</DialogTitle></DialogHeader>
+                    <Form {...areaForm}>
+                        <form onSubmit={areaForm.handleSubmit(onAreaSubmit)} className="space-y-4 p-6">
+                            <FormField control={areaForm.control} name="nombre_area" render={({ field }) => (<FormItem><FormLabel>Nombre del Área</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={areaForm.control} name="descripcion" render={({ field }) => (<FormItem><FormLabel>Descripción</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            {/* FIX: Corrected typo from `setIsAreaModalOpen` to `setAreaModalOpen`. */}
+                            <DialogFooter><Button type="button" variant="outline" onClick={() => setAreaModalOpen(false)}>Cancelar</Button><Button type="submit" isLoading={mutation.isPending}>Guardar</Button></DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isSubsystemModalOpen} onOpenChange={setIsSubsystemModalOpen}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>{subsystemModalMode === 'add' ? 'Añadir' : 'Editar'} Subsistema</DialogTitle></DialogHeader>
+                    <Form {...subsystemForm}>
+                        <form onSubmit={subsystemForm.handleSubmit(onSubsystemSubmit)} className="space-y-4 p-6">
+                            <FormField control={subsystemForm.control} name="nombre_subsistema" render={({ field }) => (<FormItem><FormLabel>Nombre del Subsistema</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={subsystemForm.control} name="descripcion" render={({ field }) => (<FormItem><FormLabel>Descripción</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>)} />
+                            <DialogFooter><Button type="button" variant="outline" onClick={() => setIsSubsystemModalOpen(false)}>Cancelar</Button><Button type="submit" isLoading={mutation.isPending}>Guardar</Button></DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+};
+
+const SetupPage: React.FC = () => {
+    const { activePlanta } = useAuth();
+    const [activeTab, setActiveTab] = useState<'details' | 'equipment' | 'areas'>('details');
+    
+    if (!activePlanta) {
+        return <Page><p>Seleccione una planta para continuar.</p></Page>;
+    }
+    
+    return (
+        <ProtectedRoute requiredPermission="setup">
+            <Page>
+                <h1 className="text-2xl font-bold text-text-primary mb-4">Configuración de la Planta</h1>
+                 <div className="mb-4 border-b border-border">
+                    <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+                        <TabButton active={activeTab === 'details'} onClick={() => setActiveTab('details')}>Detalles de la Planta</TabButton>
+                        <TabButton active={activeTab === 'equipment'} onClick={() => setActiveTab('equipment')}>Equipos</TabButton>
+                        <TabButton active={activeTab === 'areas'} onClick={() => setActiveTab('areas')}>Áreas y Subsistemas</TabButton>
+                    </nav>
+                </div>
+                <div className="mt-6">
+                    {activeTab === 'details' && <PlantDetails plantaId={activePlanta.id} />}
+                    {activeTab === 'equipment' && <EquipmentManagement plantaId={activePlanta.id} />}
+                    {activeTab === 'areas' && <AreasManagement plantaId={activePlanta.id} />}
+                </div>
             </Page>
         </ProtectedRoute>
     );

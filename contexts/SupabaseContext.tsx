@@ -67,6 +67,12 @@ const fetchModulos = async () => {
     // FIX: Ensure an array is always returned to match the expected Promise<T[]> type.
     return data || [];
 };
+const fetchAreasPlanta = async () => {
+    const { data, error } = await supabase.from('areas_planta').select('*').order('nombre_area');
+    if (error) throw error;
+    return data || [];
+};
+
 
 // --- Context Definition ---
 type Sustrato = Database['public']['Tables']['sustratos']['Row'];
@@ -77,6 +83,7 @@ type Equipo = Database['public']['Tables']['equipos']['Row'];
 type TipoMantenimiento = Database['public']['Tables']['tipos_mantenimiento']['Row'];
 type Subsistema = Database['public']['Tables']['subsistemas']['Row'];
 type Modulo = Database['public']['Tables']['modulos']['Row'];
+type AreaPlanta = Database['public']['Tables']['areas_planta']['Row'];
 
 interface SupabaseDataContextType {
     sustratos: Sustrato[];
@@ -88,6 +95,7 @@ interface SupabaseDataContextType {
     tiposMantenimiento: TipoMantenimiento[];
     subsistemas: Subsistema[];
     modulos: Modulo[];
+    areasPlanta: AreaPlanta[];
     loading: boolean;
     error: string | null;
     refreshData: () => void;
@@ -128,9 +136,10 @@ export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const { data: tiposMantenimiento = [], isLoading: tiposMantenimientoLoading, error: tiposMantenimientoError } = useSharedQuery<TipoMantenimiento>('tiposMantenimiento', fetchTiposMantenimiento);
     const { data: subsistemas = [], isLoading: subsistemasLoading, error: subsistemasError } = useSharedQuery<Subsistema>('subsistemas', fetchSubsistemas);
     const { data: modulos = [], isLoading: modulosLoading, error: modulosError } = useSharedQuery<Modulo>('modulos', fetchModulos);
+    const { data: areasPlanta = [], isLoading: areasPlantaLoading, error: areasPlantaError } = useSharedQuery<AreaPlanta>('areasPlanta', fetchAreasPlanta);
 
-    const loading = authLoading || sustratosLoading || proveedoresLoading || transportistasLoading || camionesLoading || lugaresDescargaLoading || equiposLoading || tiposMantenimientoLoading || subsistemasLoading || modulosLoading;
-    const error = [sustratosError, proveedoresError, transportistasError, camionesError, lugaresDescargaError, equiposError, tiposMantenimientoError, subsistemasError, modulosError]
+    const loading = authLoading || sustratosLoading || proveedoresLoading || transportistasLoading || camionesLoading || lugaresDescargaLoading || equiposLoading || tiposMantenimientoLoading || subsistemasLoading || modulosLoading || areasPlantaLoading;
+    const error = [sustratosError, proveedoresError, transportistasError, camionesError, lugaresDescargaError, equiposError, tiposMantenimientoError, subsistemasError, modulosError, areasPlantaError]
         .filter(Boolean)
         .map(e => (e as Error).message)
         .join('; ');
@@ -149,6 +158,7 @@ export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ 
         tiposMantenimiento,
         subsistemas,
         modulos,
+        areasPlanta,
         loading,
         error: error || null,
         refreshData,
