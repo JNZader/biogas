@@ -50,7 +50,8 @@ describe('exportToCsv', () => {
     expect(mockRemoveChild).toHaveBeenCalledTimes(1);
   });
   
-  it('should correctly handle special characters like commas and quotes', done => {
+  // FIX: Refactored test to return a Promise instead of using a `done` callback, aligning with Vitest's async test pattern.
+  it('should correctly handle special characters like commas and quotes', () => {
      const data = [
       { description: 'A value with, a comma', notes: 'Some "quoted" text' },
       { description: 'Another value\nwith a newline', notes: 'Plain text' },
@@ -59,19 +60,21 @@ describe('exportToCsv', () => {
 
     // FIX: Replaced 'jest.Mock' type with 'any' to avoid type errors.
     const blob = (global.URL.createObjectURL as any).mock.calls[0][0] as Blob;
-    const reader = new FileReader();
     
-    reader.onload = function(event) {
-        const csvContent = event.target?.result;
-        const expectedContent = 'description,notes\n"A value with, a comma","Some ""quoted"" text"\n"Another value\nwith a newline",Plain text';
-        expect(csvContent).toBe(expectedContent);
-        done();
-    };
-    
-    reader.readAsText(blob);
+    return new Promise<void>(resolve => {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const csvContent = event.target?.result;
+            const expectedContent = 'description,notes\n"A value with, a comma","Some ""quoted"" text"\n"Another value\nwith a newline",Plain text';
+            expect(csvContent).toBe(expectedContent);
+            resolve();
+        };
+        reader.readAsText(blob);
+    });
   });
 
-  it('should handle different keys in different objects', done => {
+  // FIX: Refactored test to return a Promise instead of using a `done` callback, aligning with Vitest's async test pattern.
+  it('should handle different keys in different objects', () => {
     const data = [
       { name: 'Product A', price: 10 },
       { name: 'Product B', stock: 100 },
@@ -80,16 +83,17 @@ describe('exportToCsv', () => {
     
     // FIX: Replaced 'jest.Mock' type with 'any' to avoid type errors.
     const blob = (global.URL.createObjectURL as any).mock.calls[0][0] as Blob;
-    const reader = new FileReader();
 
-    reader.onload = function(event) {
-        const csvContent = event.target?.result as string;
-        const headers = csvContent.split('\n')[0];
-        expect(headers).toBe('name,price,stock');
-        done();
-    };
-
-    reader.readAsText(blob);
+    return new Promise<void>(resolve => {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const csvContent = event.target?.result as string;
+            const headers = csvContent.split('\n')[0];
+            expect(headers).toBe('name,price,stock');
+            resolve();
+        };
+        reader.readAsText(blob);
+    });
   });
   
   it('should not do anything if rows array is empty', () => {

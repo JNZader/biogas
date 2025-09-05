@@ -108,7 +108,8 @@ export const SupabaseDataProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const isEnabled = !!activePlanta; // Enable queries only when a plant is active
 
     const useSharedQuery = <T,>(key: string, fetcher: () => Promise<T[]>) => {
-        return useQuery({
+        // FIX: Add explicit type arguments to useQuery to ensure type safety.
+        return useQuery<T[], Error>({
             queryKey: [key, activePlanta?.id],
             queryFn: fetcher,
             enabled: isEnabled,
