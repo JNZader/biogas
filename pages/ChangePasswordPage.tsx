@@ -42,8 +42,7 @@ const ChangePasswordPage: React.FC = () => {
   const onSubmit = async (data: PasswordFormData) => {
     const { password } = data;
     
-    // FIX: Replaced 'updateUser' with the v1 method 'update' to align with the expected Supabase Auth API.
-    const { error } = await supabase.auth.update({ password });
+    const { error } = await supabase.auth.updateUser({ password });
     
     if (error) {
       toast({

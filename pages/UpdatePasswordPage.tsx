@@ -27,8 +27,7 @@ const UpdatePasswordPage: React.FC = () => {
     const [isSessionReady, setIsSessionReady] = useState(false);
 
     useEffect(() => {
-        // FIX: The onAuthStateChange call for Supabase v1 returns the subscription directly in the `data` property.
-        const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'PASSWORD_RECOVERY') {
                 setIsSessionReady(true);
             }
@@ -45,8 +44,7 @@ const UpdatePasswordPage: React.FC = () => {
     const { isSubmitting } = form.formState;
 
     const onSubmit = async (data: UpdatePasswordFormData) => {
-        // FIX: Replaced 'updateUser' with the v1 method 'update' to align with the expected Supabase Auth API.
-        const { error } = await supabase.auth.update({ password: data.password });
+        const { error } = await supabase.auth.updateUser({ password: data.password });
 
         if (error) {
             toast({ title: 'Error', description: error.message, variant: 'destructive' });

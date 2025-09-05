@@ -48,13 +48,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     
     const signOut = async () => {
-        // FIX: The 'signOut' method call is correct for v1/v2. The error was likely a cascade from incorrect type definitions.
         await supabase.auth.signOut();
-        // The onAuthStateChange listener will handle state cleanup
     };
 
     useEffect(() => {
-        setLoading(true);
         const fetchUserAndPlantaData = async (session: Session | null) => {
             if (session?.user) {
                 // 1. Get public user profile
@@ -121,13 +118,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setLoading(false);
         };
         
-        // FIX: Replaced async `getSession()` with sync `session()` to align with Supabase JS v1.
-        const session = supabase.auth.session();
-        setUser(session?.user ?? null);
-        fetchUserAndPlantaData(session);
+        setLoading(true);
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
+            fetchUserAndPlantaData(session);
+        });
 
-        // FIX: The `onAuthStateChange` call for Supabase v1 returns the subscription directly in `data`.
-        const { data: authListener } = supabase.auth.onAuthStateChange(
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 setUser(session?.user ?? null);
                 // Reset states on auth change before fetching new data
@@ -138,6 +135,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 setPermissions([]);
 
                 if (event === 'SIGNED_IN') {
+                    setLoading(true);
                     await fetchUserAndPlantaData(session);
                     navigate({ to: '/' });
                 } else if (event === 'SIGNED_OUT') {
@@ -148,8 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
 
         return () => {
-            // FIX: Use v1 subscription `unsubscribe` method.
-            authListener?.unsubscribe();
+            subscription?.unsubscribe();
         };
     }, [navigate]);
 
@@ -169,7 +166,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export const useAuth = () => {
-    // FIX: Corrected a likely typo from `Auth` to `AuthContext` to resolve "Cannot find name 'Auth'" error.
     const context = useContext(AuthContext);
     if (context === undefined) {
         throw new Error('useAuth must be used within an AuthProvider');

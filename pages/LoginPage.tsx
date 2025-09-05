@@ -34,8 +34,7 @@ const LoginPage: React.FC = () => {
     const { isSubmitting } = form.formState;
 
     const onSubmit = async (data: LoginFormData) => {
-        // FIX: Replaced 'signInWithPassword' with the v1 method 'signIn' to align with the expected Supabase Auth API.
-        const { error } = await supabase.auth.signIn({
+        const { error } = await supabase.auth.signInWithPassword({
             email: data.email,
             password: data.password,
         });
