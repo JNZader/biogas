@@ -1,12 +1,9 @@
-
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Page from '../components/Page';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { useSupabaseData } from '../contexts/SupabaseContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/Dialog';
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
@@ -17,12 +14,53 @@ import { useToast } from '../hooks/use-toast';
 import EmptyState from '../components/EmptyState';
 import { cn } from '../lib/utils';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
-import { ModuloId } from '../types/branded';
+
+// --- Static list of all available application views for the permission matrix ---
+const ALL_APP_VIEWS = [
+    { 
+        category: 'Operaciones', 
+        views: [
+            { path: '/', label: 'Dashboard' },
+            { path: '/inputs', label: 'Ingresos' },
+            { path: '/feeding', label: 'Alimentación' },
+        ]
+    },
+    {
+        category: 'Monitoreo',
+        views: [
+            { path: '/graphs', label: 'Gráficos' },
+            { path: '/gas-quality', label: 'Calidad Biogás' },
+            { path: '/energy', label: 'Energía' },
+            { path: '/chp', label: 'Control CHP' },
+            { path: '/pfq', label: 'FOS/TAC' },
+            { path: '/laboratory', label: 'Laboratorio' },
+            { path: '/environment', label: 'Ambiente' },
+            { path: '/alarms', label: 'Alarmas' },
+        ]
+    },
+    {
+        category: 'Gestión',
+        views: [
+            { path: '/maintenance', label: 'Mantenimiento' },
+            { path: '/stock', label: 'Stock' },
+            { path: '/management', label: 'Administración' },
+            { path: '/user-management', label: 'Gestión de Usuarios' },
+            { path: '/setup', label: 'Configuración' },
+            { path: '/error-detective', label: 'AI Error Detective' },
+        ]
+    },
+     {
+        category: 'Perfil',
+        views: [
+            { path: '/profile-settings', label: 'Configuración de Perfil' },
+            { path: '/change-password', label: 'Cambiar Contraseña' },
+        ]
+    }
+];
 
 
 const UserManagementPage: React.FC = () => {
     const { activePlanta } = useAuth();
-    const { modulos } = useSupabaseData();
     const { toast } = useToast();
 
     const [users, setUsers] = useState<any[]>([]);
@@ -32,7 +70,7 @@ const UserManagementPage: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'invite' | 'edit'>('invite');
     const [currentUser, setCurrentUser] = useState<any | null>(null);
-    const [userPermissions, setUserPermissions] = useState<Set<ModuloId>>(new Set());
+    const [userPermissions, setUserPermissions] = useState<Set<string>>(new Set());
     const [formLoading, setFormLoading] = useState(false);
 
     const ROLES = ['Super Admin', 'Admin', 'Operador', 'Visualizador'];
@@ -68,25 +106,25 @@ const UserManagementPage: React.FC = () => {
             // Fetch current permissions for the user
             const { data, error } = await supabase
                 .from('permisos')
-                .select('idmodulo')
+                .select('vista_path')
                 .eq('id_usuario', user.id);
             
             if (error) {
                 toast({ title: 'Error', description: 'No se pudieron cargar los permisos del usuario.', variant: 'destructive' });
             } else {
-                setUserPermissions(new Set(data.map(p => p.idmodulo).filter(id => id !== null) as ModuloId[]));
+                setUserPermissions(new Set(data.map(p => p.vista_path).filter(path => path !== null) as string[]));
             }
         }
         setIsModalOpen(true);
     };
 
-    const handlePermissionChange = (moduleId: ModuloId) => {
+    const handlePermissionChange = (path: string) => {
         setUserPermissions(prev => {
             const newPermissions = new Set(prev);
-            if (newPermissions.has(moduleId)) {
-                newPermissions.delete(moduleId);
+            if (newPermissions.has(path)) {
+                newPermissions.delete(path);
             } else {
-                newPermissions.add(moduleId);
+                newPermissions.add(path);
             }
             return newPermissions;
         });
@@ -104,7 +142,6 @@ const UserManagementPage: React.FC = () => {
         // SECURITY WARNING: In a real application, this is a highly insecure operation.
         // User creation and permission management must be handled by a secure backend endpoint
         // (like a Supabase Edge Function) that uses the service_role key.
-        // The client should never have permissions to create users or assign roles directly.
         // This implementation is for demonstration purposes only within this sandboxed environment.
         toast({ title: 'Función no implementada', description: 'La invitación de usuarios debe realizarse desde un backend seguro. Esta es una demostración de la interfaz de usuario.' });
         console.log({ email, rol, permissions: selectedPermissions });
@@ -126,7 +163,7 @@ const UserManagementPage: React.FC = () => {
     };
 
     return (
-        <ProtectedRoute requiredPermission="user_management">
+        <ProtectedRoute>
             <Page>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
@@ -192,16 +229,21 @@ const UserManagementPage: React.FC = () => {
                             </div>
 
                             <fieldset>
-                                <legend className="text-sm font-medium text-text-primary">Permisos Granulares</legend>
-                                <div className="mt-2 space-y-2 max-h-48 overflow-y-auto pr-2">
-                                    {modulos.map(mod => (
-                                        <div key={mod.id} className="flex items-center justify-between p-2 rounded-md bg-background">
-                                            <Label htmlFor={`perm-${mod.id}`} className="capitalize">{mod.nombre?.replace(/_/g, ' ')}</Label>
-                                            <Switch
-                                                id={`perm-${mod.id}`}
-                                                checked={userPermissions.has(mod.id as ModuloId)}
-                                                onCheckedChange={() => handlePermissionChange(mod.id as ModuloId)}
-                                            />
+                                <legend className="text-sm font-medium text-text-primary">Permisos por Vista</legend>
+                                <div className="mt-2 space-y-4 max-h-64 overflow-y-auto pr-2 border rounded-md p-2">
+                                    {ALL_APP_VIEWS.map(category => (
+                                        <div key={category.category}>
+                                            <h4 className="text-xs font-semibold uppercase text-text-secondary mb-2">{category.category}</h4>
+                                            {category.views.map(view => (
+                                                 <div key={view.path} className="flex items-center justify-between p-2 rounded-md hover:bg-background">
+                                                    <Label htmlFor={`perm-${view.path}`} className="capitalize text-sm">{view.label}</Label>
+                                                    <Switch
+                                                        id={`perm-${view.path}`}
+                                                        checked={userPermissions.has(view.path)}
+                                                        onCheckedChange={() => handlePermissionChange(view.path)}
+                                                    />
+                                                </div>
+                                            ))}
                                         </div>
                                     ))}
                                 </div>

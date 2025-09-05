@@ -1627,6 +1627,7 @@ export interface Database {
           id: number
           id_usuario: number
           idmodulo: number | null
+          vista_path: string | null
         }
         Insert: {
           activo?: boolean | null
@@ -1634,6 +1635,7 @@ export interface Database {
           id?: number
           id_usuario: number
           idmodulo?: number | null
+          vista_path?: string | null
         }
         Update: {
           activo?: boolean | null
@@ -1641,6 +1643,7 @@ export interface Database {
           id?: number
           id_usuario?: number
           idmodulo?: number | null
+          vista_path?: string | null
         }
         Relationships: [
           {

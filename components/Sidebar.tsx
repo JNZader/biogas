@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 // FIX: Import the Button component to resolve the 'Cannot find name' error.
 import { Button } from './ui/Button';
+import { useAuthorization } from '../hooks/useAuthorization';
 
 
 interface NavSectionProps {
@@ -42,7 +43,41 @@ const NavLink: React.FC<{ to: string; icon: React.FC<any>; label: string; }> = (
 
 const Sidebar: React.FC = () => {
     const { publicProfile, signOut } = useAuth();
-    const iconClass = "h-5 w-5 mr-3";
+    const { canAccess } = useAuthorization();
+
+    const navSections = [
+        {
+            title: "Operaciones",
+            items: [
+                { to: "/", icon: HomeIcon, label: "Dashboard" },
+                { to: "/inputs", icon: DocumentPlusIcon, label: "Ingresos" },
+                { to: "/feeding", icon: CpuChipIcon, label: "Alimentación" },
+            ]
+        },
+        {
+            title: "Monitoreo",
+            items: [
+                { to: "/graphs", icon: ChartBarIcon, label: "Gráficos" },
+                { to: "/gas-quality", icon: FireIcon, label: "Calidad Biogás" },
+                { to: "/energy", icon: BoltIcon, label: "Energía" },
+                { to: "/chp", icon: AdjustmentsHorizontalIcon, label: "Control CHP" },
+                { to: "/pfq", icon: DocumentTextIcon, label: "FOS/TAC" },
+                { to: "/laboratory", icon: BeakerIcon, label: "Laboratorio" },
+                { to: "/environment", icon: SunIcon, label: "Ambiente" },
+                { to: "/alarms", icon: BellAlertIcon, label: "Alarmas" },
+            ]
+        },
+        {
+            title: "Gestión",
+            items: [
+                { to: "/maintenance", icon: WrenchScrewdriverIcon, label: "Mantenimiento" },
+                { to: "/stock", icon: ArchiveBoxIcon, label: "Stock" },
+                { to: "/management", icon: BuildingOfficeIcon, label: "Administración" },
+                { to: "/user-management", icon: UsersIcon, label: "Usuarios" },
+                { to: "/setup", icon: Cog6ToothIcon, label: "Configuración" },
+            ]
+        }
+    ];
 
     return (
         <aside className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:z-20 lg:w-64 bg-background border-r border-border">
@@ -51,29 +86,16 @@ const Sidebar: React.FC = () => {
                 <h1 className="ml-2 text-lg font-bold text-primary">BioGas Ops</h1>
             </div>
             <nav className="flex-1 px-4 py-4 space-y-6 overflow-y-auto">
-                 <NavSection title="Operaciones">
-                    <NavLink to="/" icon={HomeIcon} label="Dashboard" />
-                    <NavLink to="/inputs" icon={DocumentPlusIcon} label="Ingresos" />
-                    <NavLink to="/feeding" icon={CpuChipIcon} label="Alimentación" />
-                 </NavSection>
+                 {navSections.map(section => {
+                     const visibleItems = section.items.filter(item => canAccess(item.to));
+                     if (visibleItems.length === 0) return null;
 
-                 <NavSection title="Monitoreo">
-                    <NavLink to="/graphs" icon={ChartBarIcon} label="Gráficos" />
-                    <NavLink to="/gas-quality" icon={FireIcon} label="Calidad Biogás" />
-                    <NavLink to="/energy" icon={BoltIcon} label="Energía" />
-                    <NavLink to="/chp" icon={AdjustmentsHorizontalIcon} label="Control CHP" />
-                    <NavLink to="/pfq" icon={DocumentTextIcon} label="FOS/TAC" />
-                    <NavLink to="/laboratory" icon={BeakerIcon} label="Laboratorio" />
-                    <NavLink to="/environment" icon={SunIcon} label="Ambiente" />
-                    <NavLink to="/alarms" icon={BellAlertIcon} label="Alarmas" />
-                 </NavSection>
-
-                <NavSection title="Gestión">
-                    <NavLink to="/maintenance" icon={WrenchScrewdriverIcon} label="Mantenimiento" />
-                    <NavLink to="/stock" icon={ArchiveBoxIcon} label="Stock" />
-                    <NavLink to="/management" icon={BuildingOfficeIcon} label="Administración" />
-                    <NavLink to="/user-management" icon={UsersIcon} label="Usuarios" />
-                </NavSection>
+                     return (
+                         <NavSection title={section.title} key={section.title}>
+                            {visibleItems.map(item => <NavLink key={item.to} {...item} />)}
+                         </NavSection>
+                     );
+                 })}
             </nav>
              <div className="border-t border-border p-4">
                 <Link

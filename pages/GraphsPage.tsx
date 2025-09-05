@@ -14,17 +14,17 @@ import { cn } from '../lib/utils';
 
 
 // --- Co-located API Logic ---
-const fetchGraphData = async (biodigesterId: number) => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
+const fetchGraphData = async (biodigesterId: number, timeRange: number) => {
+    const timeRangeAgo = new Date();
+    timeRangeAgo.setDate(timeRangeAgo.getDate() - timeRange);
+    const timeRangeAgoISO = timeRangeAgo.toISOString();
 
     const [fosTacRes, gasRes, substrateRes, energyRes, gasHistoryRes] = await Promise.all([
         supabase.from('analisis_fos_tac').select('fecha_hora, fos_mg_l, tac_mg_l, relacion_fos_tac').eq('equipo_id', biodigesterId).not('relacion_fos_tac', 'is', null).order('fecha_hora', { ascending: true }).limit(10),
         supabase.from('lecturas_gas').select('ch4_porcentaje, co2_porcentaje, o2_porcentaje, h2s_ppm').eq('equipo_id_fk', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).single(),
-        supabase.from('detalle_ingreso_sustrato').select('cantidad_kg, sustratos ( nombre )').gte('created_at', thirtyDaysAgoISO),
-        supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, autoconsumo_porcentaje, horas_funcionamiento_motor_chp_dia').gte('fecha', thirtyDaysAgoISO).order('fecha', { ascending: true }),
-        supabase.from('lecturas_gas').select('fecha_hora, ch4_porcentaje, co2_porcentaje, h2s_ppm').eq('equipo_id_fk', biodigesterId).gte('fecha_hora', thirtyDaysAgoISO).order('fecha_hora', { ascending: true })
+        supabase.from('detalle_ingreso_sustrato').select('cantidad_kg, sustratos ( nombre )').gte('created_at', timeRangeAgoISO),
+        supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, autoconsumo_porcentaje, horas_funcionamiento_motor_chp_dia').gte('fecha', timeRangeAgoISO).order('fecha', { ascending: true }),
+        supabase.from('lecturas_gas').select('fecha_hora, ch4_porcentaje, co2_porcentaje, h2s_ppm').eq('equipo_id_fk', biodigesterId).gte('fecha_hora', timeRangeAgoISO).order('fecha_hora', { ascending: true })
     ]);
 
     if (fosTacRes.error) throw new Error(`FOS/TAC: ${fosTacRes.error.message}`);
@@ -42,7 +42,7 @@ interface SubstrateMixData { name: string; value: number; }
 interface PieLabelRenderProps { cx: number; cy: number; midAngle?: number; innerRadius: number; outerRadius: number; percent?: number; index?: number; }
 type RawSubstrateItem = { cantidad_kg: number; sustratos: { nombre: string; } | null; };
 
-// --- Co-located Component ---
+// --- Co-located Components ---
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
   <button
     onClick={onClick}
@@ -56,12 +56,77 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
   </button>
 );
 
+const TimeRangeButton: React.FC<{ range: number; activeRange: number; setRange: (range: number) => void; children: React.ReactNode; }> = ({ range, activeRange, setRange, children }) => (
+    <button
+        onClick={() => setRange(range)}
+        className={cn(
+            "px-3 py-1 text-sm font-medium rounded-md transition-colors",
+            activeRange === range ? "bg-primary text-primary-contrast shadow-sm" : "text-text-secondary hover:bg-surface",
+        )}
+    >
+        {children}
+    </button>
+);
+
+const KpiCard: React.FC<{ title: string; value: string; unit?: string; }> = ({ title, value, unit }) => (
+    <Card>
+        <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-text-secondary">{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <p className="text-3xl font-bold text-text-primary">
+                {value}
+                {unit && <span className="text-lg font-medium text-text-secondary ml-1">{unit}</span>}
+            </p>
+        </CardContent>
+    </Card>
+);
+
+const UptimeGauge: React.FC<{ value: number }> = ({ value }) => {
+    const themeColors = useThemeColors();
+    const percentage = Math.min(100, Math.max(0, value));
+    const endAngle = 180 - (percentage / 100) * 180;
+    const color = percentage > 95 ? themeColors.secondary : percentage > 85 ? themeColors.accent : themeColors.red;
+
+    const data = [{ value: percentage }, { value: 100 - percentage }];
+
+    return (
+        <div style={{ width: '100%', height: 150 }} className="relative">
+            <ResponsiveContainer>
+                <PieChart>
+                    <Pie
+                        data={data}
+                        cx="50%"
+                        cy="100%"
+                        startAngle={180}
+                        endAngle={0}
+                        innerRadius="70%"
+                        outerRadius="100%"
+                        fill="#8884d8"
+                        paddingAngle={0}
+                        dataKey="value"
+                        stroke="none"
+                    >
+                        <Cell fill={color} />
+                        <Cell fill="rgb(var(--color-border))" />
+                    </Pie>
+                </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 text-center">
+                <p className="text-3xl font-bold text-text-primary">{percentage.toFixed(1)}%</p>
+                <p className="text-sm text-text-secondary">Uptime</p>
+            </div>
+        </div>
+    );
+};
+
 
 const GraphsPage: React.FC = () => {
     const themeColors = useThemeColors();
     const { equipos } = useSupabaseData();
     const biodigestores = useMemo(() => equipos.filter(e => e.categoria?.toLowerCase().includes('biodigestor')), [equipos]);
     const [selectedBiodigesterId, setSelectedBiodigesterId] = React.useState<number | null>(null);
+    const [timeRange, setTimeRange] = useState<number>(30);
 
     const { role, isLoading: isAuthLoading } = useAuthorization();
     const [view, setView] = useState<'operativa' | 'gerencial'>('operativa');
@@ -73,13 +138,21 @@ const GraphsPage: React.FC = () => {
     }, [biodigestores, selectedBiodigesterId]);
 
     const { data, isLoading, error } = useQuery({
-        queryKey: ['graphData', selectedBiodigesterId],
-        queryFn: () => fetchGraphData(selectedBiodigesterId!),
+        queryKey: ['graphData', selectedBiodigesterId, timeRange],
+        queryFn: () => fetchGraphData(selectedBiodigesterId!, timeRange),
         enabled: !!selectedBiodigesterId,
     });
 
-    const { fosTacData, gasCompositionData, substrateMixData, energyProductionData, biogasQualityData, chpUptimeData } = useMemo(() => {
-        if (!data) return { fosTacData: [], gasCompositionData: [], substrateMixData: [], energyProductionData: [], biogasQualityData: [], chpUptimeData: [] };
+    const { 
+        fosTacData, 
+        gasCompositionData, 
+        substrateMixData, 
+        energyProductionData, 
+        biogasQualityData, 
+        chpUptimeData,
+        kpiData 
+    } = useMemo(() => {
+        if (!data) return { fosTacData: [], gasCompositionData: [], substrateMixData: [], energyProductionData: [], biogasQualityData: [], chpUptimeData: [], kpiData: null };
 
         const formattedFosTac = (data.fosTacData || []).map(d => ({
             date: format(new Date(d.fecha_hora), 'dd/MM'), FOS: d.fos_mg_l, TAC: d.tac_mg_l, Ratio: d.relacion_fos_tac
@@ -99,16 +172,22 @@ const GraphsPage: React.FC = () => {
         }
         
         const mix: { [key: string]: number } = {};
+        let totalSubstrateKg = 0;
         (data.substrateData as RawSubstrateItem[] | null || []).forEach((item) => {
+            totalSubstrateKg += item.cantidad_kg;
             if (item.sustratos) {
                 const name = item.sustratos.nombre;
                 mix[name] = (mix[name] || 0) + item.cantidad_kg;
             }
         });
         const formattedSubstrateMix: SubstrateMixData[] = Object.entries(mix).map(([name, value]) => ({ name, value }));
-
+        
+        let totalEnergyKWh = 0;
+        let totalChpHours = 0;
         const formattedEnergy = (data.energyData || []).map(d => {
             const total = d.generacion_electrica_total_kwh_dia || 0;
+            totalEnergyKWh += total;
+            totalChpHours += d.horas_funcionamiento_motor_chp_dia || 0;
             const autoconsumoPerc = d.autoconsumo_porcentaje || 0;
             const autoconsumo = total * (autoconsumoPerc / 100);
             const exportada = total - autoconsumo;
@@ -116,6 +195,7 @@ const GraphsPage: React.FC = () => {
                 date: format(new Date(d.fecha + "T00:00:00"), 'dd/MM'),
                 'Energía Exportada': parseFloat(exportada.toFixed(1)),
                 'Autoconsumo': parseFloat(autoconsumo.toFixed(1)),
+                'Producción Total': total
             };
         });
 
@@ -130,9 +210,24 @@ const GraphsPage: React.FC = () => {
             date: format(new Date(d.fecha + "T00:00:00"), 'dd/MM'),
             'Horas de Funcionamiento': d.horas_funcionamiento_motor_chp_dia,
         }));
+        
+        const avgCh4 = data.gasHistoryData && data.gasHistoryData.length > 0
+            ? data.gasHistoryData.reduce((sum, d) => sum + (d.ch4_porcentaje || 0), 0) / data.gasHistoryData.length
+            : 0;
 
-        return { fosTacData: formattedFosTac, gasCompositionData: formattedGas, substrateMixData: formattedSubstrateMix, energyProductionData: formattedEnergy, biogasQualityData: formattedBiogasQuality, chpUptimeData: formattedChpUptime };
-    }, [data]);
+        const totalSubstrateTon = totalSubstrateKg / 1000;
+        const efficiencyKwhPerTon = totalSubstrateTon > 0 ? totalEnergyKWh / totalSubstrateTon : 0;
+        const chpUptimePercentage = timeRange > 0 ? (totalChpHours / (timeRange * 24)) * 100 : 0;
+        
+        const calculatedKpiData = {
+            totalEnergyMWh: (totalEnergyKWh / 1000).toFixed(1),
+            efficiency: efficiencyKwhPerTon.toFixed(0),
+            avgCh4: avgCh4.toFixed(1),
+            chpUptime: chpUptimePercentage,
+        };
+
+        return { fosTacData: formattedFosTac, gasCompositionData: formattedGas, substrateMixData: formattedSubstrateMix, energyProductionData: formattedEnergy, biogasQualityData: formattedBiogasQuality, chpUptimeData: formattedChpUptime, kpiData: calculatedKpiData };
+    }, [data, timeRange]);
     
     const isSuperAdmin = role === 'Super Admin';
     const isAdmin = role === 'Admin';
@@ -142,7 +237,7 @@ const GraphsPage: React.FC = () => {
 
     const renderChartOrMessage = (chartData: unknown[], chart: React.ReactNode, title: string) => {
         if (isLoading || isAuthLoading) return <p className="text-center text-text-secondary py-10">Cargando {title.toLowerCase()}...</p>;
-        if (chartData.length === 0) return <p className="text-center text-text-secondary py-10">No hay datos disponibles para {title.toLowerCase()}.</p>;
+        if (!chartData || chartData.length === 0) return <p className="text-center text-text-secondary py-10">No hay datos disponibles para {title.toLowerCase()}.</p>;
         return <div style={{ width: '100%', height: 300 }}>{chart}</div>;
     };
     
@@ -189,7 +284,7 @@ const GraphsPage: React.FC = () => {
             )}
         </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className={cn({ "grid grid-cols-1 lg:grid-cols-2 gap-8": showOperativa })}>
         {showOperativa && (
             <>
                 <Card>
@@ -210,19 +305,53 @@ const GraphsPage: React.FC = () => {
                 </Card>
             </>
         )}
+        </div>
         {showGerencial && (
-            <>
-                <Card>
-                    <CardHeader><CardTitle>Mezcla de Sustratos (Últimos 30 Días)</CardTitle></CardHeader>
-                    <CardContent>{renderChartOrMessage(substrateMixData, (<ResponsiveContainer><PieChart><Pie data={substrateMixData} cx="50%" cy="50%" labelLine={false} outerRadius={100} fill="#8884d8" dataKey="value" nameKey="name">{substrateMixData.map((_entry, index) => (<Cell key={`cell-${index}`} fill={SUBSTRATE_CHART_COLORS[index % SUBSTRATE_CHART_COLORS.length]} />))}</Pie><Tooltip formatter={(value: number) => `${value.toLocaleString('es-AR')} kg`} contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /></PieChart></ResponsiveContainer>), "Mezcla de Sustratos")}</CardContent>
-                </Card>
-                <Card>
-                    <CardHeader><CardTitle>Producción vs. Consumo de Energía (kWh)</CardTitle></CardHeader>
-                    <CardContent>{renderChartOrMessage(energyProductionData, (<ResponsiveContainer><BarChart data={energyProductionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toLocaleString('es-AR')} kWh`} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Bar dataKey="Energía Exportada" stackId="a" fill={themeColors.primary} radius={[0, 0, 0, 0]} /><Bar dataKey="Autoconsumo" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>), "Producción de Energía")}</CardContent>
-                </Card>
-            </>
+            <div className="bg-background p-4 rounded-lg">
+                <div className="flex justify-end mb-4">
+                     <div className="flex items-center space-x-1 bg-surface p-1 rounded-lg">
+                        <TimeRangeButton range={7} activeRange={timeRange} setRange={setTimeRange}>7D</TimeRangeButton>
+                        <TimeRangeButton range={30} activeRange={timeRange} setRange={setTimeRange}>30D</TimeRangeButton>
+                        <TimeRangeButton range={90} activeRange={timeRange} setRange={setTimeRange}>90D</TimeRangeButton>
+                    </div>
+                </div>
+                {isLoading || isAuthLoading || !kpiData ? <p className="text-center text-text-secondary py-10">Cargando dashboard gerencial...</p> : (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <KpiCard title="Energía Total Producida" value={kpiData.totalEnergyMWh} unit="MWh" />
+                        <KpiCard title="Eficiencia de Producción" value={kpiData.efficiency} unit="kWh/t" />
+                        <KpiCard title="Calidad Media Biogás" value={kpiData.avgCh4} unit="% CH4" />
+                        <KpiCard title="Disponibilidad Motor (CHP)" value={kpiData.chpUptime.toFixed(1)} unit="%" />
+                        
+                        <div className="md:col-span-2">
+                            <Card>
+                                <CardHeader><CardTitle>Disponibilidad Motor (CHP)</CardTitle></CardHeader>
+                                <CardContent><UptimeGauge value={kpiData.chpUptime} /></CardContent>
+                            </Card>
+                        </div>
+                        <div className="md:col-span-2">
+                             <Card>
+                                <CardHeader><CardTitle>Mezcla de Sustratos</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(substrateMixData, (<ResponsiveContainer><PieChart><Pie data={substrateMixData} cx="50%" cy="50%" labelLine={false} outerRadius={100} fill="#8884d8" dataKey="value" nameKey="name">{substrateMixData.map((_entry, index) => (<Cell key={`cell-${index}`} fill={SUBSTRATE_CHART_COLORS[index % SUBSTRATE_CHART_COLORS.length]} />))}</Pie><Tooltip formatter={(value: number) => `${value.toLocaleString('es-AR')} kg`} contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /></PieChart></ResponsiveContainer>), "Mezcla de Sustratos")}</CardContent>
+                            </Card>
+                        </div>
+
+                        <div className="md:col-span-4">
+                            <Card>
+                                <CardHeader><CardTitle>Producción vs. Consumo de Energía (kWh)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(energyProductionData, (<ResponsiveContainer><BarChart data={energyProductionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toLocaleString('es-AR')} kWh`} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Bar dataKey="Energía Exportada" stackId="a" fill={themeColors.primary} radius={[0, 0, 0, 0]} /><Bar dataKey="Autoconsumo" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>), "Producción de Energía")}</CardContent>
+                            </Card>
+                        </div>
+                         <div className="md:col-span-4">
+                             <Card>
+                                <CardHeader><CardTitle>Tendencia de Producción Energética</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(energyProductionData, (<ResponsiveContainer><AreaChart data={energyProductionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><defs><linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={themeColors.secondary} stopOpacity={0.8}/><stop offset="95%" stopColor={themeColors.secondary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toLocaleString('es-AR')} kWh`} /><Area type="monotone" dataKey="Producción Total" stroke={themeColors.secondary} fillOpacity={1} fill="url(#colorProd)" /></AreaChart></ResponsiveContainer>), "Tendencia de Producción")}</CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                )}
+            </div>
         )}
-      </div>
+      
     </Page>
   );
 };

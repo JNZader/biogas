@@ -20,15 +20,17 @@ export const useAuthorization = () => {
     };
 
     /**
-     * Checks if the current user has a specific permission.
-     * @param requiredPermission The permission string to check for (e.g., 'mantenimiento').
+     * Checks if the current user has permission to access a specific route path.
+     * @param path The route path to check for (e.g., '/maintenance').
      * @returns `true` if the user has the permission, `false` otherwise.
      */
-    const canAccess = (requiredPermission: string): boolean => {
+    const canAccess = (path: string): boolean => {
         if (loading || !permissions) return false;
         
-        // This can be expanded in the future to support wildcard permissions, e.g., 'admin:*'
-        return permissions.includes(requiredPermission);
+        // Super Admins can access everything
+        if (role === 'Super Admin') return true;
+
+        return permissions.includes(path);
     };
     
     return {

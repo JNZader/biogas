@@ -1,5 +1,3 @@
-
-
 import React, { useMemo } from 'react';
 import { Link } from '@tanstack/react-router';
 import Page from '../components/Page';
@@ -7,7 +5,7 @@ import { ChevronRightIcon, UserCircleIcon, Cog6ToothIcon, ChevronDownIcon, Users
 import { 
     FireIcon, BeakerIcon, DocumentTextIcon, SunIcon, WrenchScrewdriverIcon, 
     ArchiveBoxIcon, CpuChipIcon, BoltIcon, AdjustmentsHorizontalIcon, ChartBarIcon, 
-    BuildingOfficeIcon, DocumentPlusIcon, BellAlertIcon
+    BuildingOfficeIcon, DocumentPlusIcon, BellAlertIcon, Cog8ToothIcon
 } from '@heroicons/react/24/outline';
 import { create } from 'zustand';
 import { useAuthorization } from '../hooks/useAuthorization';
@@ -39,10 +37,9 @@ interface MenuItem {
     icon: React.ReactNode;
     title: string;
     subtitle: string;
-    permission?: string;
 }
 
-const MenuLink: React.FC<Omit<MenuItem, 'permission'>> = ({ to, icon, title, subtitle }) => (
+const MenuLink: React.FC<MenuItem> = ({ to, icon, title, subtitle }) => (
     <Link to={to} className="flex items-center p-3 bg-surface rounded-lg hover:bg-background transition-colors duration-200 ml-4 border-l-2 border-primary/20">
         <div className="p-2 bg-primary/10 rounded-lg mr-4 text-primary">
             {icon}
@@ -86,33 +83,37 @@ const MorePage: React.FC = () => {
     const { canAccess, role } = useAuthorization();
     const iconClass = "h-6 w-6";
 
-    const dailyOpsItems: MenuItem[] = [
-        { to: '/inputs', icon: <DocumentPlusIcon className={iconClass}/>, title: 'Ingreso de Sustratos', subtitle: 'Registrar la entrada de camiones' },
-        { to: '/feeding', icon: <CpuChipIcon className={iconClass}/>, title: 'Alimentación', subtitle: 'Registrar y optimizar la dieta' },
-        { to: '/gas-quality', icon: <FireIcon className={iconClass}/>, title: 'Calidad de Biogás', subtitle: 'Registrar mediciones diarias' },
-        { to: '/energy', icon: <BoltIcon className={iconClass}/>, title: 'Registro de Energía', subtitle: 'Generación y consumo' },
-        { to: '/chp', icon: <AdjustmentsHorizontalIcon className={iconClass}/>, title: 'Control CHP', subtitle: 'Gestión de potencia del motor' },
-    ];
+    const allMenuItems = useMemo(() => ({
+        dailyOps: [
+            { to: '/inputs', icon: <DocumentPlusIcon className={iconClass}/>, title: 'Ingreso de Sustratos', subtitle: 'Registrar la entrada de camiones' },
+            { to: '/feeding', icon: <CpuChipIcon className={iconClass}/>, title: 'Alimentación', subtitle: 'Registrar y optimizar la dieta' },
+            { to: '/gas-quality', icon: <FireIcon className={iconClass}/>, title: 'Calidad de Biogás', subtitle: 'Registrar mediciones diarias' },
+            { to: '/energy', icon: <BoltIcon className={iconClass}/>, title: 'Registro de Energía', subtitle: 'Generación y consumo' },
+            { to: '/chp', icon: <AdjustmentsHorizontalIcon className={iconClass}/>, title: 'Control CHP', subtitle: 'Gestión de potencia del motor' },
+        ],
+        analysis: [
+            { to: '/graphs', icon: <ChartBarIcon className={iconClass}/>, title: 'Gráficos y Tendencias', subtitle: 'Visualizar todas las métricas' },
+            { to: '/alarms', icon: <BellAlertIcon className={iconClass}/>, title: 'Alarmas', subtitle: 'Historial de eventos y alarmas' },
+            { to: '/laboratory', icon: <BeakerIcon className={iconClass}/>, title: 'Laboratorio', subtitle: 'Análisis de sustratos y digestato' },
+            { to: '/pfq', icon: <DocumentTextIcon className={iconClass}/>, title: 'Parámetros Físico-Químicos', subtitle: 'Control de estabilidad (FOS/TAC)' },
+            { to: '/environment', icon: <SunIcon className={iconClass}/>, title: 'Ambiente', subtitle: 'Monitoreos y cumplimiento' },
+        ],
+        management: [
+            { to: '/maintenance', icon: <WrenchScrewdriverIcon className={iconClass}/>, title: 'Mantenimiento', subtitle: 'Tareas y checklists de equipos' },
+            { to: '/stock', icon: <ArchiveBoxIcon className={iconClass}/>, title: 'Stock de Repuestos', subtitle: 'Inventario de repuestos' },
+            { to: '/management', icon: <BuildingOfficeIcon className={iconClass}/>, title: 'Administración', subtitle: 'Gestionar sustratos, proveedores, etc.' },
+            { to: '/user-management', icon: <UsersIcon className={iconClass}/>, title: 'Gestión de Usuarios', subtitle: 'Invitar y administrar usuarios' },
+            { to: '/setup', icon: <Cog6ToothIcon className={iconClass}/>, title: 'Configuración de Planta', subtitle: 'Configurar parámetros de la planta' },
+            { to: '/error-detective', icon: <Cog8ToothIcon className={iconClass}/>, title: 'AI Error Detective', subtitle: 'Analizar errores del sistema' },
+        ],
+    }), [iconClass]);
     
-    const analysisItems: MenuItem[] = [
-        { to: '/graphs', icon: <ChartBarIcon className={iconClass}/>, title: 'Gráficos y Tendencias', subtitle: 'Visualizar todas las métricas' },
-        { to: '/alarms', icon: <BellAlertIcon className={iconClass}/>, title: 'Alarmas', subtitle: 'Historial de eventos y alarmas' },
-        { to: '/laboratory', icon: <BeakerIcon className={iconClass}/>, title: 'Laboratorio', subtitle: 'Análisis de sustratos y digestato' },
-        { to: '/pfq', icon: <DocumentTextIcon className={iconClass}/>, title: 'Parámetros Físico-Químicos', subtitle: 'Control de estabilidad (FOS/TAC)' },
-        { to: '/environment', icon: <SunIcon className={iconClass}/>, title: 'Ambiente', subtitle: 'Monitoreos y cumplimiento' },
-    ];
+    const visibleSections = useMemo(() => [
+        { title: 'Operaciones Diarias', items: allMenuItems.dailyOps.filter(item => canAccess(item.to)) },
+        { title: 'Análisis y Reportes', items: allMenuItems.analysis.filter(item => canAccess(item.to)) },
+        { title: 'Gestión del Sistema', items: allMenuItems.management.filter(item => canAccess(item.to)) },
+    ].filter(section => section.items.length > 0), [canAccess, allMenuItems]);
 
-    const managementItems: MenuItem[] = [
-        { to: '/maintenance', icon: <WrenchScrewdriverIcon className={iconClass}/>, title: 'Mantenimiento', subtitle: 'Tareas y checklists de equipos', permission: 'mantenimiento' },
-        { to: '/stock', icon: <ArchiveBoxIcon className={iconClass}/>, title: 'Stock de Repuestos', subtitle: 'Inventario de repuestos', permission: 'stock' },
-        { to: '/management', icon: <BuildingOfficeIcon className={iconClass}/>, title: 'Administración', subtitle: 'Gestionar sustratos, proveedores, etc.', permission: 'administracion' },
-        { to: '/user-management', icon: <UsersIcon className={iconClass}/>, title: 'Gestión de Usuarios', subtitle: 'Invitar y administrar usuarios', permission: 'user_management' },
-        { to: '/setup', icon: <Cog6ToothIcon className={iconClass}/>, title: 'Configuración Inicial', subtitle: 'Configurar parámetros de la planta', permission: 'setup' },
-    ];
-    
-    const filteredManagementItems = useMemo(() => 
-        managementItems.filter(item => !item.permission || canAccess(item.permission)),
-    [canAccess]);
 
     return (
         <Page>
@@ -128,29 +129,16 @@ const MorePage: React.FC = () => {
             </div>
 
             <div className="space-y-4">
-                <AccordionSection 
-                    title="Operaciones Diarias" 
-                    isOpen={openSections['Operaciones Diarias']}
-                    onToggle={() => toggleSection('Operaciones Diarias')}
-                >
-                    {dailyOpsItems.map(item => <MenuLink key={item.title} {...item} />)}
-                </AccordionSection>
-                <AccordionSection 
-                    title="Análisis y Reportes"
-                    isOpen={openSections['Análisis y Reportes']}
-                    onToggle={() => toggleSection('Análisis y Reportes')}
-                >
-                     {analysisItems.map(item => <MenuLink key={item.title} {...item} />)}
-                </AccordionSection>
-                 {filteredManagementItems.length > 0 && (
-                     <AccordionSection 
-                        title="Gestión del Sistema"
-                        isOpen={openSections['Gestión del Sistema']}
-                        onToggle={() => toggleSection('Gestión del Sistema')}
-                     >
-                         {filteredManagementItems.map(item => <MenuLink key={item.title} {...item} />)}
+                {visibleSections.map(section => (
+                    <AccordionSection 
+                        key={section.title}
+                        title={section.title} 
+                        isOpen={openSections[section.title]}
+                        onToggle={() => toggleSection(section.title)}
+                    >
+                        {section.items.map(item => <MenuLink key={item.title} {...item} />)}
                     </AccordionSection>
-                 )}
+                ))}
             </div>
         </Page>
     );

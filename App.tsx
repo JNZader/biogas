@@ -19,6 +19,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import Spinner from '@/components/ui/Spinner';
 import Sidebar from '@/components/Sidebar';
+import ProtectedRoute from './components/ProtectedRoute';
 
 const pathTitleMap: { [key: string]: string } = {
   '/': 'Dashboard',
@@ -65,6 +66,7 @@ const App: React.FC = () => {
   const pageTitle = getPageTitle(location.pathname);
   const authRoutes = ['/login', '/forgot-password', '/update-password'];
   const showNav = !authRoutes.includes(location.pathname);
+  const isProtectedRoute = !authRoutes.includes(location.pathname);
 
   useEffect(() => {
     document.title = `${pageTitle} | BioGas Plant Operations`;
@@ -80,7 +82,13 @@ const App: React.FC = () => {
                 {showNav && <Header title={pageTitle} />}
                 <main className={cn("flex-grow overflow-y-auto", { "pb-16 lg:pb-0": showNav })}>
                   <Suspense fallback={<Spinner />}>
-                    <Outlet />
+                    {isProtectedRoute ? (
+                      <ProtectedRoute>
+                        <Outlet />
+                      </ProtectedRoute>
+                    ) : (
+                      <Outlet />
+                    )}
                   </Suspense>
                 </main>
                 {showNav && <BottomNav />}

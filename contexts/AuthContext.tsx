@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                         .eq('usuario_id', publicUser.id),
                     supabase
                         .from('permisos')
-                        .select('modulos ( nombre )')
+                        .select('vista_path') // Fetch the view path instead of the module
                         .eq('id_usuario', publicUser.id)
                 ]);
 
@@ -109,8 +109,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     const permissionsData = permissionsRes.data;
                     if (permissionsData) {
                         const userPermissions = permissionsData
-                            .map(p => p.modulos?.nombre)
-                            .filter((name): name is string => !!name);
+                            .map(p => p.vista_path)
+                            .filter((path): path is string => !!path);
                         setPermissions(userPermissions);
                     }
                 }
@@ -162,7 +162,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loading,
     };
 
-    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+    return <AuthContext.Provider value={value}>{children}</Auth.Provider>;
 };
 
 export const useAuth = () => {

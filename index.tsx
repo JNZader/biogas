@@ -1,7 +1,7 @@
 import React, { lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 // FIX: Removed unused `AnyRoute` import.
-import { RouterProvider, createRouter, createRootRoute, createRoute, createHashHistory } from '@tanstack/react-router';
+import { RouterProvider, Router, createRootRoute, createRoute, createHashHistory } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { QueryClient } from '@tanstack/query-core';
 
@@ -37,6 +37,20 @@ const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
+
+// Register Service Worker for PWA/Offline capabilities
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(registration => {
+        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+      })
+      .catch(error => {
+        console.log('ServiceWorker registration failed: ', error);
+      });
+  });
+}
+
 
 const queryClient = new QueryClient();
 
@@ -99,8 +113,8 @@ const routeTree = rootRoute.addChildren([
   errorDetectiveRoute,
 ]);
 
-// FIX: Removed the `basepath` option, which can cause type inference issues with TanStack Router, especially when using hash-based routing.
-const router = createRouter({
+// FIX: Replaced `createRouter` with `new Router()` to work around a potential type inference issue in the factory function when dealing with a large route tree and custom history. This resolves the cryptic "strictNullChecks" TypeScript error while preserving the intended hash-based routing.
+const router = new Router({
   routeTree,
   history: createHashHistory(),
 });
