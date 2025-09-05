@@ -8,7 +8,7 @@ import { Select } from '../components/ui/Select';
 import { Label } from '../components/ui/Label';
 import { Button } from '../components/ui/Button';
 import Page from '../components/Page';
-import { BoltIcon, FireIcon, BeakerIcon, AdjustmentsHorizontalIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon, ArrowUpIcon, ArrowDownIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { BoltIcon, FireIcon, BeakerIcon, AdjustmentsHorizontalIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon, ArrowUpIcon, ArrowDownIcon, Cog6ToothIcon, CpuChipIcon, DocumentPlusIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
 import { useThemeColors } from '../stores/useThemeColors';
 import { supabase } from '../services/supabaseClient';
 import { format } from 'date-fns';
@@ -213,23 +213,6 @@ const PlantStatusCard: React.FC<{ status: PlantStatus; fosTac: number; ch4: numb
     );
 };
 
-const TimeRangeButton: React.FC<{
-    range: number;
-    activeRange: number;
-    setRange: (range: number) => void;
-    children: React.ReactNode;
-}> = ({ range, activeRange, setRange, children }) => (
-    <button
-        onClick={() => setRange(range)}
-        className={cn(
-            "px-3 py-1 text-sm font-medium rounded-md transition-colors",
-            activeRange === range ? "bg-primary text-primary-contrast shadow-sm" : "text-text-secondary hover:bg-surface",
-        )}
-    >
-        {children}
-    </button>
-);
-
 const CustomizeDashboardModal: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, onClose }) => {
     const { kpis, toggleKpi } = useDashboardStore();
 
@@ -254,6 +237,39 @@ const CustomizeDashboardModal: React.FC<{ isOpen: boolean; onClose: () => void; 
                 </div>
             </DialogContent>
         </Dialog>
+    );
+};
+
+const ActionButton: React.FC<{ to: string; icon: React.ReactNode; label: string; description: string }> = ({ to, icon, label, description }) => (
+    <Link to={to} className="group flex flex-col items-center justify-center p-4 bg-background rounded-lg text-center transition-all duration-200 hover:bg-primary/10 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+        <div className="p-3 bg-primary/20 rounded-full text-primary transition-colors group-hover:bg-primary group-hover:text-primary-contrast">
+            {icon}
+        </div>
+        <h3 className="mt-2 font-semibold text-text-primary">{label}</h3>
+        <p className="text-xs text-text-secondary">{description}</p>
+    </Link>
+);
+
+const QuickActionsCard: React.FC = () => {
+    const iconClass = "h-6 w-6";
+    const actions = [
+        { to: '/feeding', icon: <CpuChipIcon className={iconClass} />, label: 'Alimentación', description: 'Registrar la dieta diaria' },
+        { to: '/inputs', icon: <DocumentPlusIcon className={iconClass} />, label: 'Ingresos', description: 'Anotar entrada de sustrato' },
+        { to: '/gas-quality', icon: <FireIcon className={iconClass} />, label: 'Calidad de Gas', description: 'Mediciones del analizador' },
+        { to: '/maintenance', icon: <WrenchScrewdriverIcon className={iconClass} />, label: 'Mantenimiento', description: 'Ver checklist y tareas' },
+    ];
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Acciones Frecuentes</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {actions.map(action => <ActionButton key={action.to} {...action} />)}
+                </div>
+            </CardContent>
+        </Card>
     );
 };
 
@@ -336,7 +352,7 @@ const HomePage: React.FC = () => {
   return (
     <Page>
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
             <div className="md:col-span-2">
                 <PlantStatusCard 
                     status={plantStatus}
@@ -344,14 +360,18 @@ const HomePage: React.FC = () => {
                     ch4={parseFloat(kpiData?.ch4 || '0')}
                 />
             </div>
-            <div>
-                <Label htmlFor="biodigester-select">Seleccionar Biodigestor</Label>
-                <Select id="biodigester-select" value={selectedBiodigesterId ?? ''} onChange={e => setSelectedBiodigesterId(Number(e.target.value))}>
-                    {biodigestores.map(b => (
-                        <option key={b.id} value={b.id}>{b.nombre_equipo}</option>
-                    ))}
-                </Select>
-                <p className="text-xs text-text-secondary mt-1">Los KPIs de proceso se actualizarán según su selección.</p>
+            <div className="flex items-center gap-2">
+                <div className="flex-grow">
+                    <Label htmlFor="biodigester-select">Seleccionar Biodigestor</Label>
+                    <Select id="biodigester-select" value={selectedBiodigesterId ?? ''} onChange={e => setSelectedBiodigesterId(Number(e.target.value))}>
+                        {biodigestores.map(b => (
+                            <option key={b.id} value={b.id}>{b.nombre_equipo}</option>
+                        ))}
+                    </Select>
+                </div>
+                 <Button variant="ghost" size="icon" onClick={() => setIsCustomizeModalOpen(true)} className="flex-shrink-0 mt-auto" aria-label="Personalizar KPIs">
+                    <Cog6ToothIcon className="h-6 w-6 text-text-secondary" />
+                </Button>
             </div>
         </div>
 
@@ -360,43 +380,7 @@ const HomePage: React.FC = () => {
         </div>
 
         <div>
-            <Card>
-                <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                      <CardTitle>Producción Diaria</CardTitle>
-                      <div className="flex items-center space-x-1 bg-background p-1 rounded-lg">
-                          <TimeRangeButton range={7} activeRange={timeRange} setRange={setTimeRange}>7D</TimeRangeButton>
-                          <TimeRangeButton range={14} activeRange={timeRange} setRange={setTimeRange}>14D</TimeRangeButton>
-                          <TimeRangeButton range={30} activeRange={timeRange} setRange={setTimeRange}>30D</TimeRangeButton>
-                          <Button variant="ghost" size="icon" onClick={() => setIsCustomizeModalOpen(true)} className="ml-2">
-                              <Cog6ToothIcon className="h-5 w-5 text-text-secondary" />
-                          </Button>
-                      </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div style={{ width: '100%', height: 300 }}>
-                        <ResponsiveContainer>
-                            <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgb(var(--color-border))"/>
-                                <XAxis dataKey="name" stroke={themeColors.textSecondary} fontSize={12}/>
-                                <YAxis stroke={themeColors.textSecondary} fontSize={12} />
-                                <Tooltip
-                                    contentStyle={{ 
-                                        backgroundColor: 'rgb(var(--color-surface))',
-                                        border: '1px solid rgb(var(--color-border))',
-                                        borderRadius: '0.5rem',
-                                        color: 'rgb(var(--color-text-primary))',
-                                     }}
-                                />
-                                <Legend wrapperStyle={{fontSize: '14px', color: themeColors.textSecondary}}/>
-                                <Bar dataKey="Biogás (kg)" fill={themeColors.secondary} name="Biogás" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="Electricidad (kWh)" fill={themeColors.primary} name="Electricidad" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </CardContent>
-            </Card>
+           <QuickActionsCard />
         </div>
       </div>
       <CustomizeDashboardModal isOpen={isCustomizeModalOpen} onClose={() => setIsCustomizeModalOpen(false)} />
