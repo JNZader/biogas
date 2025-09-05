@@ -25,21 +25,46 @@ import type { Database } from '../types/database';
 type TableName = keyof Database['public']['Tables'];
 
 const fetchDashboardData = async (timeRange: number, biodigesterId: number) => {
-    // FIX: Removed generic helper functions that were causing a "Type instantiation is excessively deep" error.
-    // Replaced them with direct Supabase calls for clearer type inference.
-    const [kpiResults, chartRes] = await Promise.all([
+    // 1. Define date ranges for trend calculation
+    const onePeriodAgoDate = new Date();
+    onePeriodAgoDate.setDate(onePeriodAgoDate.getDate() - timeRange);
+    const twoPeriodsAgoDate = new Date();
+    twoPeriodsAgoDate.setDate(twoPeriodsAgoDate.getDate() - timeRange * 2);
+
+    const onePeriodAgoISO = onePeriodAgoDate.toISOString();
+    const twoPeriodsAgoISO = twoPeriodsAgoDate.toISOString();
+
+    // 2. Fetch all data in parallel
+    const [
+        kpiResults,
+        chartRes,
+        energiaTrendRes,
+        fosTacTrendRes,
+        gasTrendRes
+    ] = await Promise.all([
+        // A. Latest KPI values for display
         Promise.all([
             supabase.from('energia').select('generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').order('fecha', { ascending: false }).limit(1).maybeSingle(),
             supabase.from('analisis_fos_tac').select('relacion_fos_tac').eq('equipo_id', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle(),
             supabase.from('lecturas_gas').select('ch4_porcentaje').eq('equipo_id_fk', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).maybeSingle(),
         ]),
-        supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').gte('fecha', new Date(Date.now() - timeRange * 24 * 60 * 60 * 1000).toISOString().split('T')[0]).order('fecha', { ascending: true }),
+        // B. Chart data for the current period
+        supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').gte('fecha', onePeriodAgoDate.toISOString().split('T')[0]).order('fecha', { ascending: true }),
+        // C. Data for trend calculation (last two periods)
+        supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, flujo_biogas_kg_dia').gte('fecha', twoPeriodsAgoISO.split('T')[0]),
+        supabase.from('analisis_fos_tac').select('fecha_hora, relacion_fos_tac').eq('equipo_id', biodigesterId).gte('fecha_hora', twoPeriodsAgoISO),
+        supabase.from('lecturas_gas').select('fecha_hora, ch4_porcentaje').eq('equipo_id_fk', biodigesterId).gte('fecha_hora', twoPeriodsAgoISO),
     ]);
 
-    const kpiErrors: string[] = kpiResults.map((res, i) => res.error ? `KPI ${i}: ${res.error.message}` : '').filter(Boolean);
-    if (chartRes.error) kpiErrors.push(`Chart: ${chartRes.error.message}`);
-    if (kpiErrors.length > 0) throw new Error(kpiErrors.join('; '));
+    // 3. Error handling
+    const errors: string[] = kpiResults.map((res, i) => res.error ? `KPI ${i}: ${res.error.message}` : '').filter(Boolean);
+    if (chartRes.error) errors.push(`Chart: ${chartRes.error.message}`);
+    if (energiaTrendRes.error) errors.push(`Energia Trend: ${energiaTrendRes.error.message}`);
+    if (fosTacTrendRes.error) errors.push(`FosTac Trend: ${fosTacTrendRes.error.message}`);
+    if (gasTrendRes.error) errors.push(`Gas Trend: ${gasTrendRes.error.message}`);
+    if (errors.length > 0) throw new Error(errors.join('; '));
 
+    // 4. Process latest KPI values and chart data
     const [energiaRes, fosTacRes, gasRes] = kpiResults;
     const kpiData = {
         generacion: ((energiaRes.data?.generacion_electrica_total_kwh_dia || 0) / 1000).toFixed(1),
@@ -53,8 +78,50 @@ const fetchDashboardData = async (timeRange: number, biodigesterId: number) => {
         'Biogás (kg)': d.flujo_biogas_kg_dia || 0,
         'Electricidad (kWh)': d.generacion_electrica_total_kwh_dia || 0,
     }));
+    
+    // 5. Calculate trends
+    const calculateAverage = (data: any[] | null, key: string) => {
+        if (!data || data.length === 0) return 0;
+        const sum = data.reduce((acc, item) => acc + (item[key] || 0), 0);
+        return sum / data.length;
+    };
+    
+    const calculateTrend = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? 100 : 0; // Avoid division by zero
+        return ((current - previous) / previous) * 100;
+    };
 
-    return { kpiData, chartData };
+    // Split data into current and previous periods
+    const currentEnergia = (energiaTrendRes.data || []).filter(d => new Date(d.fecha) >= onePeriodAgoDate);
+    const previousEnergia = (energiaTrendRes.data || []).filter(d => new Date(d.fecha) < onePeriodAgoDate);
+    
+    const currentFosTac = (fosTacTrendRes.data || []).filter(d => new Date(d.fecha_hora) >= onePeriodAgoDate);
+    const previousFosTac = (fosTacTrendRes.data || []).filter(d => new Date(d.fecha_hora) < onePeriodAgoDate);
+
+    const currentGas = (gasTrendRes.data || []).filter(d => new Date(d.fecha_hora) >= onePeriodAgoDate);
+    const previousGas = (gasTrendRes.data || []).filter(d => new Date(d.fecha_hora) < onePeriodAgoDate);
+    
+    // Calculate and format trends
+    const trendData = {
+        generacion: calculateTrend(
+            calculateAverage(currentEnergia, 'generacion_electrica_total_kwh_dia'),
+            calculateAverage(previousEnergia, 'generacion_electrica_total_kwh_dia')
+        ),
+        biogas: calculateTrend(
+            calculateAverage(currentEnergia, 'flujo_biogas_kg_dia'),
+            calculateAverage(previousEnergia, 'flujo_biogas_kg_dia')
+        ),
+        fosTac: calculateTrend(
+            calculateAverage(currentFosTac, 'relacion_fos_tac'),
+            calculateAverage(previousFosTac, 'relacion_fos_tac')
+        ),
+        ch4: calculateTrend(
+            calculateAverage(currentGas, 'ch4_porcentaje'),
+            calculateAverage(previousGas, 'ch4_porcentaje')
+        ),
+    };
+
+    return { kpiData, chartData, trendData };
 };
 
 
@@ -85,7 +152,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({ title, value, unit, trend, ico
         <div className={`flex items-center text-sm font-medium ${trendColor}`}>
           {isPositive ? <ArrowUpIcon className="h-4 w-4 mr-1" aria-hidden="true" /> : <ArrowDownIcon className="h-4 w-4 mr-1" aria-hidden="true" />}
           <span className="sr-only">{isPositive ? 'Aumento del' : 'Disminución del'}</span>
-          <span>{Math.abs(trend)}% vs last period</span>
+          <span>{Math.abs(trend).toFixed(1)}% vs last period</span>
         </div>
       </CardContent>
     </Card>
@@ -219,14 +286,14 @@ const HomePage: React.FC = () => {
     }
   }, [data, evaluateAlerts]);
 
-  const { kpiData, chartData } = data || { kpiData: null, chartData: [] };
+  const { kpiData, chartData, trendData } = data || { kpiData: null, chartData: [], trendData: null };
 
   const kpiDefinitions = useMemo<Record<string, KpiCardProps>>(() => ({
-    generacion: { title: 'Generación Eléctrica', value: kpiData?.generacion || '...', unit: 'MWh', trend: 2.5, icon: <BoltIcon className="h-6 w-6" /> },
-    biogas: { title: 'Producción Biogás', value: kpiData?.biogas || '...', unit: 'kg/d', trend: -1.2, icon: <FireIcon className="h-6 w-6" /> },
-    fosTac: { title: 'FOS/TAC', value: kpiData?.fosTac || '...', trend: 5.0, icon: <BeakerIcon className="h-6 w-6" /> },
-    ch4: { title: 'Calidad Gas (CH4)', value: kpiData?.ch4 || '...', unit: '%', trend: 0.5, icon: <AdjustmentsHorizontalIcon className="h-6 w-6" /> },
-  }), [kpiData]);
+    generacion: { title: 'Generación Eléctrica', value: kpiData?.generacion || '...', unit: 'MWh', trend: trendData?.generacion ?? 0, icon: <BoltIcon className="h-6 w-6" /> },
+    biogas: { title: 'Producción Biogás', value: kpiData?.biogas || '...', unit: 'kg/d', trend: trendData?.biogas ?? 0, icon: <FireIcon className="h-6 w-6" /> },
+    fosTac: { title: 'FOS/TAC', value: kpiData?.fosTac || '...', trend: trendData?.fosTac ?? 0, icon: <BeakerIcon className="h-6 w-6" /> },
+    ch4: { title: 'Calidad Gas (CH4)', value: kpiData?.ch4 || '...', unit: '%', trend: trendData?.ch4 ?? 0, icon: <AdjustmentsHorizontalIcon className="h-6 w-6" /> },
+  }), [kpiData, trendData]);
 
   const visibleKpis = useMemo(() => 
     dashboardKpis.filter(k => k.isVisible).map(k => kpiDefinitions[k.id]),
