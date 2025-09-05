@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, CartesianGrid, BarChart, Bar, AreaChart, Area, ReferenceLine, ScatterChart, Scatter, ZAxis } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, CartesianGrid, BarChart, Bar, AreaChart, Area, ReferenceLine, ScatterChart, Scatter, ZAxis, Sector } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import Page from '../components/Page';
@@ -47,7 +47,7 @@ const fetchGraphData = async (biodigesterId: number, timeRange: number) => {
 // --- Co-located Type Definitions ---
 interface GasCompositionData { name: string; value: number; }
 interface SubstrateMixData { name: string; value: number; }
-interface PieLabelRenderProps { cx: number; cy: number; midAngle?: number; innerRadius: number; outerRadius: number; percent?: number; index?: number; fill?: string; }
+interface PieLabelRenderProps { cx: number; cy: number; midAngle?: number; innerRadius: number; outerRadius: number; percent?: number; index?: number; fill?: string; payload?: any, value?: number }
 type RawSubstrateItem = { created_at: string; cantidad_kg: number; sustratos: { nombre: string; } | null; };
 
 // --- Co-located Components ---
@@ -122,7 +122,7 @@ const GraphsPage: React.FC = () => {
     const { equipos } = useSupabaseData();
     const biodigestores = useMemo(() => equipos.filter(e => e.categoria?.toLowerCase().includes('biodigestor')), [equipos]);
     const [selectedBiodigesterId, setSelectedBiodigesterId] = React.useState<number | null>(null);
-    const [timeRange, setTimeRange] = useState<number>(30);
+    const [timeRange, setTimeRange] = useState<number>(365);
 
     const { role, isLoading: isAuthLoading } = useAuthorization();
     const [view, setView] = useState<'operativa' | 'gerencial'>('operativa');
@@ -156,35 +156,24 @@ const GraphsPage: React.FC = () => {
             'Residuos Frigorífico': 0.02,
         };
 
-        const DIGESTER_VOLUME_M3 = 5000;
-        const BIOGAS_DENSITY_KG_M3 = 1.2;
-
-        const calculateMovingAverage = (data: any[], key: string, window: number) => {
-            const result = [];
-            for (let i = 0; i < data.length; i++) {
-                const slice = data.slice(Math.max(0, i - window + 1), i + 1);
-                const sum = slice.reduce((acc, item) => acc + (item[key] || 0), 0);
-                const avg = sum / slice.length;
-                result.push({ ...data[i], [`${key}_MA`]: parseFloat(avg.toFixed(2)) });
-            }
-            return result;
-        };
-        
-        // --- KPI Calculations ---
+        // --- KPI & Mock Data Calculations ---
         const totalEnergyKWh = (data.energyData || []).reduce((sum, d) => sum + (d.generacion_electrica_total_kwh_dia || 0), 0);
         const totalChpHours = (data.energyData || []).reduce((sum, d) => sum + (d.horas_funcionamiento_motor_chp_dia || 0), 0);
-        const avgCh4 = data.gasHistoryData && data.gasHistoryData.length > 0
-            ? data.gasHistoryData.reduce((sum, d) => sum + (d.ch4_porcentaje || 0), 0) / data.gasHistoryData.length : 0;
+        const avgCh4 = data.gasHistoryData && data.gasHistoryData.length > 0 ? data.gasHistoryData.reduce((sum, d) => sum + (d.ch4_porcentaje || 0), 0) / data.gasHistoryData.length : 0;
         const chpUptime = timeRange > 0 ? (totalChpHours / (timeRange * 24)) * 100 : 0;
         const totalSubstrateKg = (data.substrateData || []).reduce((sum, d) => sum + d.cantidad_kg, 0);
-        const efficiencyKwhPerTon = totalSubstrateKg > 0 ? totalEnergyKWh / (totalSubstrateKg / 1000) : 0;
         const totalSubstrateCost = (data.substrateData as RawSubstrateItem[] || []).reduce((sum, item) => {
-            const cost = MOCK_COST_PER_KG_USD[item.sustratos?.nombre || ''] || 0.02; // default cost
+            const cost = MOCK_COST_PER_KG_USD[item.sustratos?.nombre || ''] || 0.02;
             return sum + (item.cantidad_kg * cost);
         }, 0);
         const totalEnergyMWh = totalEnergyKWh / 1000;
         const costPerMwh = totalEnergyMWh > 0 ? totalSubstrateCost / totalEnergyMWh : 0;
         const totalRevenue = totalEnergyMWh * energyPrice;
+        
+        const generationPercentage = 68.4; // Mock
+        const contractsFulfilledPercentage = 101.7; // Mock
+        const annualGoalMwh = 5582; // Mock
+        const currentProductionMwh = 4975; // Mock
 
         // --- Chart Data Processing ---
         const formattedFosTac = (data.fosTacData || []).map(d => ({ date: format(new Date(d.fecha_hora), 'dd/MM'), FOS: d.fos_mg_l, TAC: d.tac_mg_l, Ratio: d.relacion_fos_tac }));
@@ -234,10 +223,7 @@ const GraphsPage: React.FC = () => {
             return entry;
         }).sort((a,b) => a.date.localeCompare(b.date));
         
-        const engineAvailabilityData = [
-            { name: 'Disponible', value: chpUptime },
-            { name: 'Indisponible', value: 100 - chpUptime },
-        ];
+        const engineAvailabilityData = [ { name: 'Disponible', value: chpUptime }, { name: 'Indisponible', value: 100 - chpUptime } ];
         
         const formattedEnergy = (data.energyData || []).map(d => {
             const total = d.generacion_electrica_total_kwh_dia || 0;
@@ -248,23 +234,40 @@ const GraphsPage: React.FC = () => {
         const formattedBiogasQuality = (data.gasHistoryData || []).map(d => ({ date: format(new Date(d.fecha_hora), 'dd/MM HH:mm'), 'CH4 (%)': d.ch4_porcentaje, 'CO2 (%)': d.co2_porcentaje, 'H2S (ppm)': d.h2s_ppm, }));
         const formattedChpUptime = (data.energyData || []).map(d => ({ date: format(new Date(d.fecha + "T00:00:00"), 'dd/MM'), 'Horas de Funcionamiento': d.horas_funcionamiento_motor_chp_dia }));
 
+        const materialBalanceData = [
+            { anio: 2021, "Sustratos a Laguna": 39715, "Sacado de Lagunas": -27230 },
+            { anio: 2022, "Sustratos a Laguna": 39662, "Sacado de Lagunas": -50512 },
+            { anio: 2023, "Sustratos a Laguna": 50471, "Sacado de Lagunas": -50014 },
+            { anio: 2024, "Sustratos a Laguna": 48349, "Sacado de Lagunas": -67522 },
+        ];
+        
+        const contractPerformanceData = [
+            { anio: 2, 'Energía generada': 5569, 'Diferencial': 1357 },
+            { anio: 4, 'Energía generada': 6939, 'Diferencial': 1408 },
+            { anio: 6, 'Energía generada': 7715, 'Diferencial': 2133 },
+        ];
+        
+        const annualGoalData = [
+            { name: 'Completado', value: currentProductionMwh },
+            { name: 'Restante', value: Math.max(0, annualGoalMwh - currentProductionMwh) },
+        ];
+
         return { 
             fosTacData: formattedFosTac, gasCompositionData: formattedGas, substrateMixData: formattedSubstrateMix, 
             energyProductionData: formattedEnergy, biogasQualityData: formattedBiogasQuality, chpUptimeData: formattedChpUptime, 
             kpiData: {
                 totalEnergyMWh: totalEnergyMWh.toFixed(1),
-                efficiency: efficiencyKwhPerTon.toFixed(0),
-                avgCh4: avgCh4.toFixed(1),
-                chpUptime: chpUptime,
                 totalSubstrateCost: totalSubstrateCost.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }),
                 costPerMwh: costPerMwh.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }),
                 totalRevenue: totalRevenue.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }),
+                generationPercentage: `${generationPercentage}%`,
+                contractsFulfilled: `${contractsFulfilledPercentage}%`,
+                chpUptime: chpUptime,
             },
             // Gerencial
-            substrateCostTimeline,
-            dietEvolutionData,
-            engineAvailabilityData,
-            totalSubstrateMix
+            substrateCostTimeline, dietEvolutionData, engineAvailabilityData, totalSubstrateMix,
+            materialBalanceData, contractPerformanceData, annualGoalData,
+            annualGoalMetrics: { current: currentProductionMwh, goal: annualGoalMwh }
         };
     }, [data, timeRange, energyPrice]);
     
@@ -303,6 +306,22 @@ const GraphsPage: React.FC = () => {
         return (<text x={x} y={y} fill={fill === themeColors.primary || fill === themeColors.secondary ? "white" : "black"} fontSize="12px" textAnchor="middle" dominantBaseline="central">{`${(percent * 100).toFixed(0)}%`}</text>);
     };
 
+    const renderGaugeLabel = ({ cx, cy, value, payload }: PieLabelRenderProps) => {
+      if (!memoizedData || !payload) return null;
+      const { current, goal } = memoizedData.annualGoalMetrics;
+      const percent = (current / goal) * 100;
+      return (
+        <>
+            <text x={cx} y={cy - 10} textAnchor="middle" dominantBaseline="central" className="text-3xl font-bold fill-text-primary">
+               {current.toLocaleString('es-AR')}
+            </text>
+            <text x={cx} y={cy + 15} textAnchor="middle" dominantBaseline="central" className="text-sm fill-text-secondary">
+               de {goal.toLocaleString('es-AR')} MWh ({percent.toFixed(1)}%)
+            </text>
+        </>
+      );
+    };
+
     const chartComponents: Record<string, React.ReactNode> = memoizedData ? {
         energyProduction: <Card><CardHeader><CardTitle>Producción vs. Consumo de Energía (kWh)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.energyProductionData, <ResponsiveContainer><BarChart data={memoizedData.energyProductionData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend /><Bar dataKey="Energía Exportada" stackId="a" fill={themeColors.primary} /><Bar dataKey="Autoconsumo" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>, "Producción de Energía")}</CardContent></Card>,
         chpUptime: <Card><CardHeader><CardTitle>Disponibilidad Diaria del Motor (CHP)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.chpUptimeData, <ResponsiveContainer><BarChart data={memoizedData.chpUptimeData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis domain={[0, 24]} /><Tooltip /><ReferenceLine y={24} strokeDasharray="3 3" /><Bar dataKey="Horas de Funcionamiento" fill={themeColors.primary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>, "Disponibilidad del Motor")}</CardContent></Card>,
@@ -310,6 +329,10 @@ const GraphsPage: React.FC = () => {
         substrateCost: <Card><CardHeader><CardTitle>Costos de Sustrato vs Ingresos (USD)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.substrateCostTimeline, <ResponsiveContainer><BarChart data={memoizedData.substrateCostTimeline}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis /><Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} /><Legend /><Bar dataKey="Costo (USD)" fill={themeColors.accent} radius={[4, 4, 0, 0]} /><Bar dataKey="Ingresos (USD)" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>, "Costos de Sustrato")}</CardContent></Card>,
         engineAvailability: <Card><CardHeader><CardTitle>Disponibilidad del Motor (%)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.engineAvailabilityData, <ResponsiveContainer><PieChart><Pie data={memoizedData.engineAvailabilityData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} label={renderCustomizedPieLabel}>{memoizedData.engineAvailabilityData.map((entry, index) => <Cell key={`cell-${index}`} fill={index === 0 ? themeColors.primary : themeColors.textSecondary} />)}</Pie><Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} /><Legend /></PieChart></ResponsiveContainer>, "Disponibilidad del Motor")}</CardContent></Card>,
         substrateCompositionTimeline: <Card><CardHeader><CardTitle>Composición de la Dieta (t/día)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.dietEvolutionData, <ResponsiveContainer><BarChart data={memoizedData.dietEvolutionData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis label={{ value: 't', angle: -90, position: 'insideLeft' }} /><Tooltip /><Legend />{Object.keys(memoizedData.totalSubstrateMix).map((sustrato, i) => <Bar key={sustrato} dataKey={sustrato} stackId="a" fill={SUBSTRATE_CHART_COLORS[i % SUBSTRATE_CHART_COLORS.length]} />)}</BarChart></ResponsiveContainer>, "Evolución de la Dieta")}</CardContent></Card>,
+        materialBalance: <Card><CardHeader><CardTitle>Balance de Materiales (Anual)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.materialBalanceData, <ResponsiveContainer><BarChart data={memoizedData.materialBalanceData} layout="vertical" barSize={20}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis type="category" dataKey="anio" width={50} /><Tooltip formatter={(value: number) => `${value.toLocaleString('es-AR')} Tn`} /><Legend /><Bar dataKey="Sustratos a Laguna" stackId="a" fill={themeColors.secondary} /><Bar dataKey="Sacado de Lagunas" stackId="a" fill={themeColors.primary} /></BarChart></ResponsiveContainer>, "Balance de Materiales")}</CardContent></Card>,
+        contractPerformance: <Card><CardHeader><CardTitle>Rendimiento de Contratos (MWh)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.contractPerformanceData, <ResponsiveContainer><BarChart data={memoizedData.contractPerformanceData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="anio" label={{ value: 'Año de Contrato', position: 'insideBottom', offset: -5 }} /><YAxis /><Tooltip /><Legend /><Bar dataKey="Energía generada" stackId="a" fill={themeColors.primary} /><Bar dataKey="Diferencial" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>, "Rendimiento de Contratos")}</CardContent></Card>,
+        annualGoalGauge: <Card><CardHeader><CardTitle>Progreso vs Objetivo Anual</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.annualGoalData, <ResponsiveContainer><PieChart><Pie data={memoizedData.annualGoalData} dataKey="value" cx="50%" cy="50%" innerRadius={80} outerRadius={110} startAngle={180} endAngle={0} paddingAngle={2} labelLine={false} label={renderGaugeLabel}>{memoizedData.annualGoalData.map((entry, index) => <Cell key={`cell-${index}`} fill={index === 0 ? themeColors.primary : themeColors.textSecondary + '33'} />)}</Pie><Tooltip formatter={(value: number) => value.toLocaleString('es-AR')} /></PieChart></ResponsiveContainer>, "Objetivo Anual")}</CardContent></Card>,
+        substrateEvolution: <Card><CardHeader><CardTitle>Evolución de Ingreso de Sustratos (Tn)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.dietEvolutionData, <ResponsiveContainer><AreaChart data={memoizedData.dietEvolutionData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend />{Object.keys(memoizedData.totalSubstrateMix).map((sustrato, i) => <Area key={sustrato} type="monotone" dataKey={sustrato} stackId="1" stroke={SUBSTRATE_CHART_COLORS[i % SUBSTRATE_CHART_COLORS.length]} fill={SUBSTRATE_CHART_COLORS[i % SUBSTRATE_CHART_COLORS.length]} />)}</AreaChart></ResponsiveContainer>, "Evolución de Sustratos")}</CardContent></Card>,
     } : {};
     
     const visibleCharts = charts.filter(c => c.isVisible);
@@ -377,21 +400,20 @@ const GraphsPage: React.FC = () => {
                 </div>
                 {!memoizedData ? <p className="text-center text-text-secondary py-10">Cargando dashboard gerencial...</p> : (
                     <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-                            <KpiCard title="Ingresos Totales" value={memoizedData.kpiData.totalRevenue} />
-                            <KpiCard title="Costo Total Sustratos" value={memoizedData.kpiData.totalSubstrateCost} />
-                            <KpiCard title="Costo / MWh" value={memoizedData.kpiData.costPerMwh} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <KpiCard title="% Generación" value={memoizedData.kpiData.generationPercentage} />
+                            <KpiCard title="% Contratos Cumplidos" value={memoizedData.kpiData.contractsFulfilled} />
                             <KpiCard title="Energía Total Producida" value={memoizedData.kpiData.totalEnergyMWh} unit="MWh" />
                             <KpiCard title="Disponibilidad Motor (CHP)" value={memoizedData.kpiData.chpUptime.toFixed(1)} unit="%" />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                             {visibleCharts.length === 0 ? (
-                                <p className="md:col-span-2 xl:col-span-3 text-center text-text-secondary py-10">No hay gráficos seleccionados. Haz clic en el ícono de engranaje para personalizar tu vista.</p>
+                                <p className="md:col-span-2 xl:col-span-4 text-center text-text-secondary py-10">No hay gráficos seleccionados. Haz clic en el ícono de engranaje para personalizar tu vista.</p>
                             ) : (
                                 visibleCharts.map(chart => (
-                                    <React.Fragment key={chart.id}>
+                                    <div key={chart.id} className={cn({ 'xl:col-span-2': ['materialBalance', 'substrateEvolution'].includes(chart.id) })}>
                                         {chartComponents[chart.id]}
-                                    </React.Fragment>
+                                    </div>
                                 ))
                             )}
                         </div>
