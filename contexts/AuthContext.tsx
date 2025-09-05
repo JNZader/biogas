@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../services/supabaseClient';
-// FIX: Replaced 'AuthSession' with 'Session' and added a direct 'User' import to align with Supabase v2 types.
-import type { Session, User } from '@supabase/supabase-js';
+// FIX: Use AuthSession from Supabase v1 types and derive Session and User types to resolve export errors.
+import type { AuthSession } from '@supabase/supabase-js';
 import type { Database } from '../types/database';
 import { useNavigate } from '@tanstack/react-router';
 import { PlantaId } from '../types/branded';
+
+type Session = AuthSession;
+type User = NonNullable<Session['user']>;
 
 type Planta = Database['public']['Tables']['plantas']['Row'];
 type PublicProfile = Database['public']['Tables']['usuarios']['Row'];
@@ -45,7 +48,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     
     const signOut = async () => {
-        // FIX: The 'signOut' method call is correct for v2. The previous error was a cascade from incorrect type definitions.
+        // FIX: The 'signOut' method call is correct for v1/v2. The error was likely a cascade from incorrect type definitions.
         await supabase.auth.signOut();
         // The onAuthStateChange listener will handle state cleanup
     };
@@ -118,13 +121,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setLoading(false);
         };
         
-        // FIX: Replaced the synchronous `session()` call with the asynchronous `getSession()` to align with Supabase JS v2.
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-            fetchUserAndPlantaData(session);
-        });
+        // FIX: Replaced async `getSession()` with sync `session()` to align with Supabase JS v1.
+        const session = supabase.auth.session();
+        setUser(session?.user ?? null);
+        fetchUserAndPlantaData(session);
 
-        // FIX: The `onAuthStateChange` call is correct for Supabase v2. The previous error was a cascade from incorrect type definitions.
+        // FIX: The `onAuthStateChange` call for Supabase v1 returns the subscription directly in `data`.
         const { data: authListener } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 setUser(session?.user ?? null);
@@ -146,7 +148,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
 
         return () => {
-            authListener?.subscription.unsubscribe();
+            // FIX: Use v1 subscription `unsubscribe` method.
+            authListener?.unsubscribe();
         };
     }, [navigate]);
 

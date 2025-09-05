@@ -339,6 +339,10 @@ if (supabaseUrl && supabaseAnonKey) {
             queryResult = queryResult.filter(row => row[column] < value);
             return builder;
         },
+        lte: (column: string, value: any) => {
+            queryResult = queryResult.filter(row => row[column] <= value);
+            return builder;
+        },
         not: (column: string, operator: string, value: any) => {
             if (operator === 'is') {
                 queryResult = queryResult.filter(row => row[column] !== value);

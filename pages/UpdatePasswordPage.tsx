@@ -27,14 +27,14 @@ const UpdatePasswordPage: React.FC = () => {
     const [isSessionReady, setIsSessionReady] = useState(false);
 
     useEffect(() => {
-        // FIX: The onAuthStateChange call is correct for Supabase v2. The previous error was likely due to cascading type issues from other incorrect API calls.
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        // FIX: The onAuthStateChange call for Supabase v1 returns the subscription directly in the `data` property.
+        const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'PASSWORD_RECOVERY') {
                 setIsSessionReady(true);
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => subscription?.unsubscribe();
     }, []);
 
     const form = useForm<UpdatePasswordFormData>({
@@ -45,8 +45,8 @@ const UpdatePasswordPage: React.FC = () => {
     const { isSubmitting } = form.formState;
 
     const onSubmit = async (data: UpdatePasswordFormData) => {
-        // FIX: Replaced 'update' with the current 'updateUser' method to align with the Supabase Auth v2 API, resolving the 'property does not exist' error.
-        const { error } = await supabase.auth.updateUser({ password: data.password });
+        // FIX: Replaced 'updateUser' with the v1 method 'update' to align with the expected Supabase Auth API.
+        const { error } = await supabase.auth.update({ password: data.password });
 
         if (error) {
             toast({ title: 'Error', description: error.message, variant: 'destructive' });

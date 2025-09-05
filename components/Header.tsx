@@ -1,18 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserCircleIcon, ChevronDownIcon, BuildingOffice2Icon } from '@heroicons/react/24/solid';
-// FIX: Updated package name from '@tanstack/router' to '@tanstack/react-router'.
-import { Link } from '@tanstack/react-router';
+import { BuildingOffice2Icon, ChevronDownIcon, ClockIcon } from '@heroicons/react/24/solid';
 import { useAuth } from '../contexts/AuthContext';
 import { PlantaId } from '../types/branded';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale/es';
 
 interface HeaderProps {
   title: string;
 }
 
 const Header: React.FC<HeaderProps> = ({ title }) => {
-    const { activePlanta, userPlants, switchPlanta, publicProfile } = useAuth();
+    const { activePlanta, userPlants, switchPlanta } = useAuth();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentDateTime(new Date()), 1000); // Update every second
+        return () => clearInterval(timer);
+    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -25,10 +31,12 @@ const Header: React.FC<HeaderProps> = ({ title }) => {
     }, []);
 
     const handleSwitchPlanta = (plantaId: number) => {
-        // FIX: Cast the 'plantaId' from a generic number to the branded type 'PlantaId' to satisfy the 'switchPlanta' function's signature and ensure type safety.
         switchPlanta(plantaId as PlantaId);
         setIsDropdownOpen(false);
     };
+    
+    const formattedDateTime = format(currentDateTime, "eeee, d 'de' MMMM, HH:mm:ss", { locale: es });
+    const capitalizedDateTime = formattedDateTime.charAt(0).toUpperCase() + formattedDateTime.slice(1);
 
   return (
     <header className="bg-surface shadow-sm sticky top-0 z-10">
@@ -71,14 +79,11 @@ const Header: React.FC<HeaderProps> = ({ title }) => {
 
             <h1 className="text-xl font-bold text-primary" data-testid="page-title">{title}</h1>
           </div>
-          <Link 
-            to="/profile-settings" 
-            className="flex items-center space-x-2 p-2 rounded-md hover:bg-background transition-colors"
-            aria-label={`Ir a configuración de perfil de ${publicProfile?.nombres || 'usuario'}`}
-          >
-             <span className="text-sm text-text-secondary hidden sm:block">{publicProfile?.nombres || 'Usuario'}</span>
-            <UserCircleIcon className="h-8 w-8 text-text-secondary" aria-hidden="true" />
-          </Link>
+           <div className="flex items-center space-x-2 p-2 rounded-md text-sm text-text-secondary font-medium">
+            <ClockIcon className="h-5 w-5" aria-hidden="true" />
+            <span className="hidden md:block">{capitalizedDateTime}</span>
+            <span className="md:hidden">{format(currentDateTime, "d/MM/yy, HH:mm:ss")}</span>
+          </div>
         </div>
       </div>
     </header>

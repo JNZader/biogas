@@ -22,7 +22,7 @@ import Sidebar from '@/components/Sidebar';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const pathTitleMap: { [key: string]: string } = {
-  '/': 'Dashboard',
+  '/': 'Inicio',
   '/login': 'Iniciar Sesión',
   '/forgot-password': 'Recuperar Contraseña',
   '/update-password': 'Actualizar Contraseña',
