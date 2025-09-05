@@ -43,7 +43,11 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 const plantDetailsSchema = z.object({
     nombre_planta: z.string().min(1, "El nombre es requerido."),
     ubicacion: z.string().optional(),
-    capacity: z.coerce.number().positive().optional(),
+    // FIX: Replaced z.coerce.number() with z.preprocess to handle type inference issues where `coerce` might be incorrectly resolved to `unknown` instead of `number`.
+    capacity: z.preprocess(
+        (val) => (val === '' || val === undefined || val === null) ? undefined : Number(val),
+        z.number({ invalid_type_error: "Debe ser un número válido." }).positive().optional()
+    ),
     digester_type: z.string().optional(),
 });
 type PlantDetailsFormData = z.infer<typeof plantDetailsSchema>;
@@ -61,7 +65,6 @@ const PlantDetails: React.FC<{ plantaId: number }> = ({ plantaId }) => {
         },
     });
     
-    // FIX: Replaced the `values` prop with `defaultValues` and a `useEffect` with `form.reset` to prevent complex type inference issues and ensure the form initializes correctly.
     const form = useForm<PlantDetailsFormData>({
         resolver: zodResolver(plantDetailsSchema),
         defaultValues: {
@@ -267,7 +270,6 @@ const AreasManagement: React.FC<{ plantaId: number }> = ({ plantaId }) => {
         onSuccess: () => {
             toast({ title: 'Éxito', description: 'Operación realizada con éxito.' });
             refreshData();
-            // FIX: Corrected typo from `setIsAreaModalOpen` to `setAreaModalOpen`.
             setAreaModalOpen(false);
             setIsSubsystemModalOpen(false);
             setCurrentArea(null);
@@ -280,7 +282,7 @@ const AreasManagement: React.FC<{ plantaId: number }> = ({ plantaId }) => {
         setAreaModalMode(mode);
         setCurrentArea(area);
         areaForm.reset(mode === 'edit' ? area : { nombre_area: '', descripcion: '' });
-        setIsAreaModalOpen(true);
+        setAreaModalOpen(true);
     };
 
     const handleOpenSubsystemModal = (mode: 'add' | 'edit', parentId: number, subsistema: Subsistema | null = null) => {
@@ -332,7 +334,6 @@ const AreasManagement: React.FC<{ plantaId: number }> = ({ plantaId }) => {
                 ))}
             </div>
 
-            {/* FIX: Corrected typo from `setIsAreaModalOpen` to `setAreaModalOpen`. */}
             <Dialog open={isAreaModalOpen} onOpenChange={setAreaModalOpen}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>{areaModalMode === 'add' ? 'Crear' : 'Editar'} Área</DialogTitle></DialogHeader>
@@ -340,7 +341,6 @@ const AreasManagement: React.FC<{ plantaId: number }> = ({ plantaId }) => {
                         <form onSubmit={areaForm.handleSubmit(onAreaSubmit)} className="space-y-4 p-6">
                             <FormField control={areaForm.control} name="nombre_area" render={({ field }) => (<FormItem><FormLabel>Nombre del Área</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={areaForm.control} name="descripcion" render={({ field }) => (<FormItem><FormLabel>Descripción</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>)} />
-                            {/* FIX: Corrected typo from `setIsAreaModalOpen` to `setAreaModalOpen`. */}
                             <DialogFooter><Button type="button" variant="outline" onClick={() => setAreaModalOpen(false)}>Cancelar</Button><Button type="submit" isLoading={mutation.isPending}>Guardar</Button></DialogFooter>
                         </form>
                     </Form>
