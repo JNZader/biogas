@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, CartesianGrid, BarChart, Bar, AreaChart, Area } from 'recharts';
+// FIX: Removed non-existent 'StackedCarousel' from 'recharts' import.
+import { ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, CartesianGrid, BarChart, Bar, AreaChart, Area, ReferenceLine } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import Page from '../components/Page';
 import { useThemeColors } from '../stores/useThemeColors';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
 import { useAuthorization } from '../hooks/useAuthorization';
@@ -20,9 +21,9 @@ const fetchGraphData = async (biodigesterId: number, timeRange: number) => {
     const timeRangeAgoISO = timeRangeAgo.toISOString();
 
     const [fosTacRes, gasRes, substrateRes, energyRes, gasHistoryRes] = await Promise.all([
-        supabase.from('analisis_fos_tac').select('fecha_hora, fos_mg_l, tac_mg_l, relacion_fos_tac').eq('equipo_id', biodigesterId).not('relacion_fos_tac', 'is', null).order('fecha_hora', { ascending: true }).limit(10),
+        supabase.from('analisis_fos_tac').select('fecha_hora, fos_mg_l, tac_mg_l, relacion_fos_tac').eq('equipo_id', biodigesterId).not('relacion_fos_tac', 'is', null).gte('fecha_hora', timeRangeAgoISO).order('fecha_hora', { ascending: true }),
         supabase.from('lecturas_gas').select('ch4_porcentaje, co2_porcentaje, o2_porcentaje, h2s_ppm').eq('equipo_id_fk', biodigesterId).order('fecha_hora', { ascending: false }).limit(1).single(),
-        supabase.from('detalle_ingreso_sustrato').select('cantidad_kg, sustratos ( nombre )').gte('created_at', timeRangeAgoISO),
+        supabase.from('detalle_ingreso_sustrato').select('created_at, cantidad_kg, sustratos ( nombre )').gte('created_at', timeRangeAgoISO),
         supabase.from('energia').select('fecha, generacion_electrica_total_kwh_dia, autoconsumo_porcentaje, horas_funcionamiento_motor_chp_dia').gte('fecha', timeRangeAgoISO).order('fecha', { ascending: true }),
         supabase.from('lecturas_gas').select('fecha_hora, ch4_porcentaje, co2_porcentaje, h2s_ppm').eq('equipo_id_fk', biodigesterId).gte('fecha_hora', timeRangeAgoISO).order('fecha_hora', { ascending: true })
     ]);
@@ -40,7 +41,7 @@ const fetchGraphData = async (biodigesterId: number, timeRange: number) => {
 interface GasCompositionData { name: string; value: number; }
 interface SubstrateMixData { name: string; value: number; }
 interface PieLabelRenderProps { cx: number; cy: number; midAngle?: number; innerRadius: number; outerRadius: number; percent?: number; index?: number; }
-type RawSubstrateItem = { cantidad_kg: number; sustratos: { nombre: string; } | null; };
+type RawSubstrateItem = { created_at: string; cantidad_kg: number; sustratos: { nombre: string; } | null; };
 
 // --- Co-located Components ---
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
@@ -82,45 +83,6 @@ const KpiCard: React.FC<{ title: string; value: string; unit?: string; }> = ({ t
     </Card>
 );
 
-const UptimeGauge: React.FC<{ value: number }> = ({ value }) => {
-    const themeColors = useThemeColors();
-    const percentage = Math.min(100, Math.max(0, value));
-    const endAngle = 180 - (percentage / 100) * 180;
-    const color = percentage > 95 ? themeColors.secondary : percentage > 85 ? themeColors.accent : themeColors.red;
-
-    const data = [{ value: percentage }, { value: 100 - percentage }];
-
-    return (
-        <div style={{ width: '100%', height: 150 }} className="relative">
-            <ResponsiveContainer>
-                <PieChart>
-                    <Pie
-                        data={data}
-                        cx="50%"
-                        cy="100%"
-                        startAngle={180}
-                        endAngle={0}
-                        innerRadius="70%"
-                        outerRadius="100%"
-                        fill="#8884d8"
-                        paddingAngle={0}
-                        dataKey="value"
-                        stroke="none"
-                    >
-                        <Cell fill={color} />
-                        <Cell fill="rgb(var(--color-border))" />
-                    </Pie>
-                </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 text-center">
-                <p className="text-3xl font-bold text-text-primary">{percentage.toFixed(1)}%</p>
-                <p className="text-sm text-text-secondary">Uptime</p>
-            </div>
-        </div>
-    );
-};
-
-
 const GraphsPage: React.FC = () => {
     const themeColors = useThemeColors();
     const { equipos } = useSupabaseData();
@@ -143,19 +105,18 @@ const GraphsPage: React.FC = () => {
         enabled: !!selectedBiodigesterId,
     });
 
-    const { 
-        fosTacData, 
-        gasCompositionData, 
-        substrateMixData, 
-        energyProductionData, 
-        biogasQualityData, 
-        chpUptimeData,
-        kpiData 
-    } = useMemo(() => {
-        if (!data) return { fosTacData: [], gasCompositionData: [], substrateMixData: [], energyProductionData: [], biogasQualityData: [], chpUptimeData: [], kpiData: null };
+    const memoizedData = useMemo(() => {
+        if (!data) return { 
+            fosTacData: [], gasCompositionData: [], substrateMixData: [], 
+            energyProductionData: [], biogasQualityData: [], chpUptimeData: [], 
+            kpiData: null, productionEfficiencyData: [], fosTacRatioData: [], methaneTrendData: [],
+            dailySubstrateData: [], chpDailyUptimeData: [], biogasCompositionRatioData: [], h2sTrendData: [], dietEvolutionData: [],
+// FIX: Added 'totalSubstrateMix' to the default returned object to prevent access errors on the initial render.
+            totalSubstrateMix: {}
+        };
 
         const formattedFosTac = (data.fosTacData || []).map(d => ({
-            date: format(new Date(d.fecha_hora), 'dd/MM'), FOS: d.fos_mg_l, TAC: d.tac_mg_l, Ratio: d.relacion_fos_tac
+            date: format(parseISO(d.fecha_hora), 'dd/MM'), FOS: d.fos_mg_l, TAC: d.tac_mg_l, Ratio: d.relacion_fos_tac
         }));
         
         let formattedGas: GasCompositionData[] = [];
@@ -171,16 +132,14 @@ const GraphsPage: React.FC = () => {
             if (otherGases > 0.1) formattedGas.push({ name: 'Otros', value: parseFloat(otherGases.toFixed(2)) });
         }
         
-        const mix: { [key: string]: number } = {};
-        let totalSubstrateKg = 0;
+        const totalSubstrateMix: { [key: string]: number } = {};
         (data.substrateData as RawSubstrateItem[] | null || []).forEach((item) => {
-            totalSubstrateKg += item.cantidad_kg;
             if (item.sustratos) {
                 const name = item.sustratos.nombre;
-                mix[name] = (mix[name] || 0) + item.cantidad_kg;
+                totalSubstrateMix[name] = (totalSubstrateMix[name] || 0) + item.cantidad_kg;
             }
         });
-        const formattedSubstrateMix: SubstrateMixData[] = Object.entries(mix).map(([name, value]) => ({ name, value }));
+        const formattedSubstrateMix: SubstrateMixData[] = Object.entries(totalSubstrateMix).map(([name, value]) => ({ name, value }));
         
         let totalEnergyKWh = 0;
         let totalChpHours = 0;
@@ -200,7 +159,7 @@ const GraphsPage: React.FC = () => {
         });
 
         const formattedBiogasQuality = (data.gasHistoryData || []).map(d => ({
-            date: format(new Date(d.fecha_hora), 'dd/MM'),
+            date: format(parseISO(d.fecha_hora), 'dd/MM HH:mm'),
             'CH4 (%)': d.ch4_porcentaje,
             'CO2 (%)': d.co2_porcentaje,
             'H2S (ppm)': d.h2s_ppm,
@@ -214,7 +173,33 @@ const GraphsPage: React.FC = () => {
         const avgCh4 = data.gasHistoryData && data.gasHistoryData.length > 0
             ? data.gasHistoryData.reduce((sum, d) => sum + (d.ch4_porcentaje || 0), 0) / data.gasHistoryData.length
             : 0;
+        
+        const dailyData: Record<string, { energy: number, substrate: number }> = {};
+        (data.energyData || []).forEach(e => {
+            const dateStr = e.fecha;
+            dailyData[dateStr] = { ...dailyData[dateStr], energy: e.generacion_electrica_total_kwh_dia || 0, substrate: 0 };
+        });
+        (data.substrateData as RawSubstrateItem[] || []).forEach(s => {
+            const dateStr = s.created_at.split('T')[0];
+            if (!dailyData[dateStr]) dailyData[dateStr] = { energy: 0, substrate: 0 };
+            dailyData[dateStr].substrate = (dailyData[dateStr].substrate || 0) + s.cantidad_kg;
+        });
 
+        const formattedProductionEfficiency = Object.entries(dailyData)
+            .map(([date, values]) => {
+                if (values.substrate > 0 && values.energy > 0) {
+                    const efficiency = values.energy / (values.substrate / 1000); // kWh per ton
+                    return {
+                        date: format(new Date(date + "T00:00:00"), 'dd/MM'),
+                        'Eficiencia (kWh/t)': parseFloat(efficiency.toFixed(1)),
+                    };
+                }
+                return null;
+            })
+            .filter((d): d is { date: string; 'Eficiencia (kWh/t)': number } => d !== null)
+            .sort((a,b) => a.date.localeCompare(b.date));
+
+        const totalSubstrateKg = Object.values(dailyData).reduce((sum, d) => sum + d.substrate, 0);
         const totalSubstrateTon = totalSubstrateKg / 1000;
         const efficiencyKwhPerTon = totalSubstrateTon > 0 ? totalEnergyKWh / totalSubstrateTon : 0;
         const chpUptimePercentage = timeRange > 0 ? (totalChpHours / (timeRange * 24)) * 100 : 0;
@@ -225,8 +210,59 @@ const GraphsPage: React.FC = () => {
             avgCh4: avgCh4.toFixed(1),
             chpUptime: chpUptimePercentage,
         };
+        
+        const formattedFosTacRatio = formattedFosTac.map(d => ({ date: d.date, Ratio: d.Ratio }));
+        const formattedMethaneTrend = (data.gasHistoryData || []).map(d => ({ date: format(parseISO(d.fecha_hora), 'dd/MM HH:mm'), 'CH4 (%)': d.ch4_porcentaje, }));
 
-        return { fosTacData: formattedFosTac, gasCompositionData: formattedGas, substrateMixData: formattedSubstrateMix, energyProductionData: formattedEnergy, biogasQualityData: formattedBiogasQuality, chpUptimeData: formattedChpUptime, kpiData: calculatedKpiData };
+        const formattedDailySubstrate = Object.entries(dailyData)
+            .map(([date, values]) => ({
+                date: format(new Date(date + "T00:00:00"), 'dd/MM'),
+                'Sustrato (t)': parseFloat((values.substrate / 1000).toFixed(1)),
+            }))
+            .sort((a,b) => a.date.localeCompare(b.date));
+        
+        const formattedBiogasCompositionRatio = (data.gasHistoryData || []).map(d => ({
+            date: format(parseISO(d.fecha_hora), 'dd/MM HH:mm'),
+            CH4: d.ch4_porcentaje || 0,
+            CO2: d.co2_porcentaje || 0,
+        }));
+        
+        const formattedH2STrend = (data.gasHistoryData || []).map(d => ({
+            date: format(parseISO(d.fecha_hora), 'dd/MM HH:mm'),
+            'H2S (ppm)': d.h2s_ppm,
+        }));
+        
+        const dailyMix: Record<string, Record<string, number>> = {};
+        (data.substrateData as RawSubstrateItem[] | null || []).forEach((item) => {
+            if (item.sustratos) {
+                const dateStr = item.created_at.split('T')[0];
+                if (!dailyMix[dateStr]) {
+                    dailyMix[dateStr] = {};
+                }
+                const name = item.sustratos.nombre;
+                dailyMix[dateStr][name] = (dailyMix[dateStr][name] || 0) + item.cantidad_kg;
+            }
+        });
+        const formattedDietEvolution = Object.entries(dailyMix)
+            .map(([date, substrates]) => {
+                const entry: Record<string, any> = { date: format(new Date(date + "T00:00:00"), 'dd/MM') };
+                for (const [name, qty] of Object.entries(substrates)) {
+                    entry[name] = parseFloat((qty / 1000).toFixed(1)); // tons
+                }
+                return entry;
+            })
+            .sort((a,b) => a.date.localeCompare(b.date));
+
+
+        return { 
+            fosTacData: formattedFosTac, gasCompositionData: formattedGas, substrateMixData: formattedSubstrateMix, 
+            energyProductionData: formattedEnergy, biogasQualityData: formattedBiogasQuality, chpUptimeData: formattedChpUptime, 
+            kpiData: calculatedKpiData, productionEfficiencyData: formattedProductionEfficiency, fosTacRatioData: formattedFosTacRatio,
+            methaneTrendData: formattedMethaneTrend, dailySubstrateData: formattedDailySubstrate, chpDailyUptimeData: formattedChpUptime,
+            biogasCompositionRatioData: formattedBiogasCompositionRatio, h2sTrendData: formattedH2STrend, dietEvolutionData: formattedDietEvolution,
+// FIX: Added 'totalSubstrateMix' to the returned object, making it accessible outside the 'useMemo' hook.
+            totalSubstrateMix
+        };
     }, [data, timeRange]);
     
     const isSuperAdmin = role === 'Super Admin';
@@ -253,6 +289,7 @@ const GraphsPage: React.FC = () => {
     
     const GAS_CHART_COLORS = [themeColors.secondary, themeColors.textSecondary, themeColors.accent, themeColors.red, '#A8A29E'];
     const SUBSTRATE_CHART_COLORS = [themeColors.primary, themeColors.secondary, themeColors.accent, themeColors.textSecondary, '#3B82F6', '#F97316'];
+    const DIET_COLORS = SUBSTRATE_CHART_COLORS;
 
     const renderCustomizedPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: PieLabelRenderProps) => {
         if (midAngle === undefined || percent === undefined) return null;
@@ -289,65 +326,84 @@ const GraphsPage: React.FC = () => {
             <>
                 <Card>
                   <CardHeader><CardTitle>Tendencia FOS/TAC</CardTitle></CardHeader>
-                  <CardContent>{renderChartOrMessage(fosTacData, (<ResponsiveContainer><LineChart data={fosTacData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))"/><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis yAxisId="left" stroke={themeColors.textSecondary} label={{ value: 'mg/L', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><YAxis yAxisId="right" orientation="right" domain={[0, 1]} stroke={themeColors.textSecondary} label={{ value: 'Ratio', angle: 90, position: 'insideRight', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Line yAxisId="left" type="monotone" dataKey="FOS" stroke={themeColors.primary} name="FOS (mg/L)" dot={false} /><Line yAxisId="left" type="monotone" dataKey="TAC" stroke={themeColors.textSecondary} name="TAC (mg/L)" dot={false}/><Line yAxisId="right" type="monotone" dataKey="Ratio" stroke={themeColors.red} strokeDasharray="5 5" name="Ratio" dot={false}/></LineChart></ResponsiveContainer>), "Tendencia FOS/TAC")}</CardContent>
+                  <CardContent>{renderChartOrMessage(memoizedData.fosTacData, (<ResponsiveContainer><LineChart data={memoizedData.fosTacData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))"/><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis yAxisId="left" stroke={themeColors.textSecondary} label={{ value: 'mg/L', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><YAxis yAxisId="right" orientation="right" domain={[0, 1]} stroke={themeColors.textSecondary} label={{ value: 'Ratio', angle: 90, position: 'insideRight', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Line yAxisId="left" type="monotone" dataKey="FOS" stroke={themeColors.primary} name="FOS (mg/L)" dot={false} /><Line yAxisId="left" type="monotone" dataKey="TAC" stroke={themeColors.textSecondary} name="TAC (mg/L)" dot={false}/><Line yAxisId="right" type="monotone" dataKey="Ratio" stroke={themeColors.red} strokeDasharray="5 5" name="Ratio" dot={false}/></LineChart></ResponsiveContainer>), "Tendencia FOS/TAC")}</CardContent>
                 </Card>
                 <Card>
                     <CardHeader><CardTitle>Composición del Biogás (Última Medición)</CardTitle></CardHeader>
-                    <CardContent>{renderChartOrMessage(gasCompositionData, (<ResponsiveContainer><PieChart><Pie data={gasCompositionData} cx="50%" cy="50%" labelLine={false} label={renderCustomizedPieLabel} outerRadius={100} fill="#8884d8" dataKey="value" nameKey="name">{gasCompositionData.map((_entry, index) => (<Cell key={`cell-${index}`} fill={GAS_CHART_COLORS[index % GAS_CHART_COLORS.length]} />))}</Pie><Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /></PieChart></ResponsiveContainer>), "Composición del Biogás")}</CardContent>
+                    <CardContent>{renderChartOrMessage(memoizedData.gasCompositionData, (<ResponsiveContainer><PieChart><Pie data={memoizedData.gasCompositionData} cx="50%" cy="50%" labelLine={false} label={renderCustomizedPieLabel} outerRadius={100} fill="#8884d8" dataKey="value" nameKey="name">{memoizedData.gasCompositionData.map((_entry, index) => (<Cell key={`cell-${index}`} fill={GAS_CHART_COLORS[index % GAS_CHART_COLORS.length]} />))}</Pie><Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /></PieChart></ResponsiveContainer>), "Composición del Biogás")}</CardContent>
                 </Card>
                 <Card>
                     <CardHeader><CardTitle>Tendencia de Calidad de Biogás</CardTitle></CardHeader>
-                    <CardContent>{renderChartOrMessage(biogasQualityData, (<ResponsiveContainer><LineChart data={biogasQualityData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis yAxisId="left" domain={[40, 70]} stroke={themeColors.textSecondary} label={{ value: '%', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><YAxis yAxisId="right" orientation="right" domain={[0, 'dataMax + 50']} stroke={themeColors.textSecondary} label={{ value: 'ppm', angle: 90, position: 'insideRight', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Line yAxisId="left" type="monotone" dataKey="CH4 (%)" stroke={themeColors.secondary} dot={false} /><Line yAxisId="left" type="monotone" dataKey="CO2 (%)" stroke={themeColors.primary} dot={false} /><Line yAxisId="right" type="monotone" dataKey="H2S (ppm)" stroke={themeColors.accent} dot={false} /></LineChart></ResponsiveContainer>), "Tendencia de Calidad de Biogás")}</CardContent>
+                    <CardContent>{renderChartOrMessage(memoizedData.biogasQualityData, (<ResponsiveContainer><LineChart data={memoizedData.biogasQualityData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis yAxisId="left" domain={[40, 70]} stroke={themeColors.textSecondary} label={{ value: '%', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><YAxis yAxisId="right" orientation="right" domain={[0, 'dataMax + 50']} stroke={themeColors.textSecondary} label={{ value: 'ppm', angle: 90, position: 'insideRight', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Line yAxisId="left" type="monotone" dataKey="CH4 (%)" stroke={themeColors.secondary} dot={false} /><Line yAxisId="left" type="monotone" dataKey="CO2 (%)" stroke={themeColors.primary} dot={false} /><Line yAxisId="right" type="monotone" dataKey="H2S (ppm)" stroke={themeColors.accent} dot={false} /></LineChart></ResponsiveContainer>), "Tendencia de Calidad de Biogás")}</CardContent>
                 </Card>
                 <Card>
                     <CardHeader><CardTitle>Horas de Funcionamiento del Motor (CHP)</CardTitle></CardHeader>
-                    <CardContent>{renderChartOrMessage(chpUptimeData, (<ResponsiveContainer><AreaChart data={chpUptimeData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><defs><linearGradient id="colorUptime" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={themeColors.primary} stopOpacity={0.8}/><stop offset="95%" stopColor={themeColors.primary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis domain={[0, 24]} stroke={themeColors.textSecondary} label={{ value: 'Horas', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toFixed(1)} hrs`} /><Area type="monotone" dataKey="Horas de Funcionamiento" stroke={themeColors.primary} fillOpacity={1} fill="url(#colorUptime)" /></AreaChart></ResponsiveContainer>), "Horas de Funcionamiento del Motor (CHP)")}</CardContent>
+                    <CardContent>{renderChartOrMessage(memoizedData.chpUptimeData, (<ResponsiveContainer><AreaChart data={memoizedData.chpUptimeData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><defs><linearGradient id="colorUptime" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={themeColors.primary} stopOpacity={0.8}/><stop offset="95%" stopColor={themeColors.primary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis domain={[0, 24]} stroke={themeColors.textSecondary} label={{ value: 'Horas', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toFixed(1)} hrs`} /><Area type="monotone" dataKey="Horas de Funcionamiento" stroke={themeColors.primary} fillOpacity={1} fill="url(#colorUptime)" /></AreaChart></ResponsiveContainer>), "Horas de Funcionamiento del Motor (CHP)")}</CardContent>
                 </Card>
             </>
         )}
         </div>
         {showGerencial && (
             <div className="bg-background p-4 rounded-lg">
-                <div className="flex justify-end mb-4">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-text-primary">Dashboard Gerencial</h2>
                      <div className="flex items-center space-x-1 bg-surface p-1 rounded-lg">
                         <TimeRangeButton range={7} activeRange={timeRange} setRange={setTimeRange}>7D</TimeRangeButton>
                         <TimeRangeButton range={30} activeRange={timeRange} setRange={setTimeRange}>30D</TimeRangeButton>
                         <TimeRangeButton range={90} activeRange={timeRange} setRange={setTimeRange}>90D</TimeRangeButton>
                     </div>
                 </div>
-                {isLoading || isAuthLoading || !kpiData ? <p className="text-center text-text-secondary py-10">Cargando dashboard gerencial...</p> : (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        <KpiCard title="Energía Total Producida" value={kpiData.totalEnergyMWh} unit="MWh" />
-                        <KpiCard title="Eficiencia de Producción" value={kpiData.efficiency} unit="kWh/t" />
-                        <KpiCard title="Calidad Media Biogás" value={kpiData.avgCh4} unit="% CH4" />
-                        <KpiCard title="Disponibilidad Motor (CHP)" value={kpiData.chpUptime.toFixed(1)} unit="%" />
-                        
-                        <div className="md:col-span-2">
-                            <Card>
-                                <CardHeader><CardTitle>Disponibilidad Motor (CHP)</CardTitle></CardHeader>
-                                <CardContent><UptimeGauge value={kpiData.chpUptime} /></CardContent>
-                            </Card>
+                {isLoading || isAuthLoading || !memoizedData.kpiData ? <p className="text-center text-text-secondary py-10">Cargando dashboard gerencial...</p> : (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                            <KpiCard title="Energía Total Producida" value={memoizedData.kpiData.totalEnergyMWh} unit="MWh" />
+                            <KpiCard title="Eficiencia de Producción" value={memoizedData.kpiData.efficiency} unit="kWh/t" />
+                            <KpiCard title="Calidad Media Biogás" value={memoizedData.kpiData.avgCh4} unit="% CH4" />
+                            <KpiCard title="Disponibilidad Motor (CHP)" value={memoizedData.kpiData.chpUptime.toFixed(1)} unit="%" />
                         </div>
-                        <div className="md:col-span-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                              <Card>
-                                <CardHeader><CardTitle>Mezcla de Sustratos</CardTitle></CardHeader>
-                                <CardContent>{renderChartOrMessage(substrateMixData, (<ResponsiveContainer><PieChart><Pie data={substrateMixData} cx="50%" cy="50%" labelLine={false} outerRadius={100} fill="#8884d8" dataKey="value" nameKey="name">{substrateMixData.map((_entry, index) => (<Cell key={`cell-${index}`} fill={SUBSTRATE_CHART_COLORS[index % SUBSTRATE_CHART_COLORS.length]} />))}</Pie><Tooltip formatter={(value: number) => `${value.toLocaleString('es-AR')} kg`} contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /></PieChart></ResponsiveContainer>), "Mezcla de Sustratos")}</CardContent>
-                            </Card>
-                        </div>
-
-                        <div className="md:col-span-4">
-                            <Card>
                                 <CardHeader><CardTitle>Producción vs. Consumo de Energía (kWh)</CardTitle></CardHeader>
-                                <CardContent>{renderChartOrMessage(energyProductionData, (<ResponsiveContainer><BarChart data={energyProductionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toLocaleString('es-AR')} kWh`} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Bar dataKey="Energía Exportada" stackId="a" fill={themeColors.primary} radius={[0, 0, 0, 0]} /><Bar dataKey="Autoconsumo" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>), "Producción de Energía")}</CardContent>
+                                <CardContent>{renderChartOrMessage(memoizedData.energyProductionData, (<ResponsiveContainer><BarChart data={memoizedData.energyProductionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toLocaleString('es-AR')} kWh`} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Bar dataKey="Energía Exportada" stackId="a" fill={themeColors.primary} radius={[0, 0, 0, 0]} /><Bar dataKey="Autoconsumo" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>), "Producción de Energía")}</CardContent>
                             </Card>
-                        </div>
-                         <div className="md:col-span-4">
                              <Card>
-                                <CardHeader><CardTitle>Tendencia de Producción Energética</CardTitle></CardHeader>
-                                <CardContent>{renderChartOrMessage(energyProductionData, (<ResponsiveContainer><AreaChart data={energyProductionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><defs><linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={themeColors.secondary} stopOpacity={0.8}/><stop offset="95%" stopColor={themeColors.secondary} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value: number) => `${value.toLocaleString('es-AR')} kWh`} /><Area type="monotone" dataKey="Producción Total" stroke={themeColors.secondary} fillOpacity={1} fill="url(#colorProd)" /></AreaChart></ResponsiveContainer>), "Tendencia de Producción")}</CardContent>
+                                <CardHeader><CardTitle>Consumo Diario de Sustrato (t)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.dailySubstrateData, (<ResponsiveContainer><BarChart data={memoizedData.dailySubstrateData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'toneladas', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><Bar dataKey="Sustrato (t)" fill={themeColors.accent} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>), "Consumo de Sustrato")}</CardContent>
+                            </Card>
+                             <Card>
+                                <CardHeader><CardTitle>Eficiencia de Producción (kWh/t)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.productionEfficiencyData, (<ResponsiveContainer><AreaChart data={memoizedData.productionEfficiencyData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><defs><linearGradient id="colorEfficiency" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={themeColors.accent} stopOpacity={0.8}/><stop offset="95%" stopColor={themeColors.accent} stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'kWh/t', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><Area type="monotone" dataKey="Eficiencia (kWh/t)" stroke={themeColors.accent} fillOpacity={1} fill="url(#colorEfficiency)" /></AreaChart></ResponsiveContainer>), "Eficiencia de Producción")}</CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader><CardTitle>Disponibilidad Diaria del Motor (CHP)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.chpDailyUptimeData, (<ResponsiveContainer><BarChart data={memoizedData.chpDailyUptimeData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis domain={[0, 24]} stroke={themeColors.textSecondary} label={{ value: 'horas', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><ReferenceLine y={24} stroke="rgb(var(--color-border))" strokeDasharray="3 3" /><Bar dataKey="Horas de Funcionamiento" fill={themeColors.primary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>), "Disponibilidad del Motor")}</CardContent>
+                            </Card>
+                             <Card>
+                                <CardHeader><CardTitle>Tendencia de Estabilidad (Ratio FOS/TAC)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.fosTacRatioData, (<ResponsiveContainer><LineChart data={memoizedData.fosTacRatioData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis domain={[0, 0.8]} stroke={themeColors.textSecondary} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><ReferenceLine y={0.4} label={{ value: 'Alerta', position: 'insideTopLeft', fill: themeColors.red }} stroke={themeColors.red} strokeDasharray="3 3" /><Line type="monotone" dataKey="Ratio" stroke={themeColors.primary} dot={false} /></LineChart></ResponsiveContainer>), "Tendencia de Estabilidad")}</CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader><CardTitle>Evolución Calidad de Biogás (% CH4)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.methaneTrendData, (<ResponsiveContainer><LineChart data={memoizedData.methaneTrendData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis domain={[50, 70]} stroke={themeColors.textSecondary} label={{ value: '% CH4', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><Line type="monotone" dataKey="CH4 (%)" stroke={themeColors.secondary} dot={false} /></LineChart></ResponsiveContainer>), "Calidad de Biogás")}</CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader><CardTitle>Composición de Biogás (CH4 vs CO2)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.biogasCompositionRatioData, (<ResponsiveContainer><AreaChart data={memoizedData.biogasCompositionRatioData} stackOffset="expand" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis tickFormatter={(tick) => `${tick * 100}%`} stroke={themeColors.textSecondary} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} formatter={(value, name) => `${(value as number).toFixed(1)}%`}/><Legend wrapperStyle={{ color: themeColors.textSecondary }} /><Area type="monotone" dataKey="CH4" stackId="1" stroke={themeColors.secondary} fill={themeColors.secondary} /><Area type="monotone" dataKey="CO2" stackId="1" stroke={themeColors.textSecondary} fill={themeColors.textSecondary} /></AreaChart></ResponsiveContainer>), "Composición de Biogás")}</CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader><CardTitle>Tendencia de Sulfhídrico (H2S)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.h2sTrendData, (<ResponsiveContainer><LineChart data={memoizedData.h2sTrendData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis domain={[0, 'dataMax + 50']} stroke={themeColors.textSecondary} label={{ value: 'ppm', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }}/><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><ReferenceLine y={200} label={{ value: 'Límite', position: 'insideTopLeft', fill: themeColors.red }} stroke={themeColors.red} strokeDasharray="3 3" /><Line type="monotone" dataKey="H2S (ppm)" stroke={themeColors.accent} dot={false} /></LineChart></ResponsiveContainer>), "Tendencia de H2S")}</CardContent>
+                            </Card>
+                             <Card>
+                                <CardHeader><CardTitle>Mezcla de Sustratos (Total)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.substrateMixData, (<ResponsiveContainer><PieChart><Pie data={memoizedData.substrateMixData} cx="50%" cy="50%" labelLine={false} outerRadius={100} fill="#8884d8" dataKey="value" nameKey="name">{memoizedData.substrateMixData.map((_entry, index) => (<Cell key={`cell-${index}`} fill={SUBSTRATE_CHART_COLORS[index % SUBSTRATE_CHART_COLORS.length]} />))}</Pie><Tooltip formatter={(value: number) => `${value.toLocaleString('es-AR')} kg`} contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))'}} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} /></PieChart></ResponsiveContainer>), "Mezcla de Sustratos")}</CardContent>
+                            </Card>
+                             <Card>
+                                <CardHeader><CardTitle>Evolución de la Dieta (t/día)</CardTitle></CardHeader>
+                                <CardContent>{renderChartOrMessage(memoizedData.dietEvolutionData, (<ResponsiveContainer><BarChart data={memoizedData.dietEvolutionData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-border))" /><XAxis dataKey="date" stroke={themeColors.textSecondary} /><YAxis stroke={themeColors.textSecondary} label={{ value: 'toneladas', angle: -90, position: 'insideLeft', fill: themeColors.textSecondary }} /><Tooltip contentStyle={{ backgroundColor: 'rgba(var(--color-surface), 0.8)', backdropFilter: 'blur(5px)', border: '1px solid rgb(var(--color-border))', borderRadius: '0.5rem', color: 'rgb(var(--color-text-primary))' }} /><Legend wrapperStyle={{ color: themeColors.textSecondary }} />{Object.keys(memoizedData.totalSubstrateMix).map((sustrato, i) => (<Bar key={sustrato} dataKey={sustrato} stackId="a" fill={DIET_COLORS[i % DIET_COLORS.length]} />))}</BarChart></ResponsiveContainer>), "Evolución de la Dieta")}</CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
         )}

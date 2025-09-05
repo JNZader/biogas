@@ -67,23 +67,23 @@ if (supabaseUrl && supabaseAnonKey) {
             },
         };
     }),
-    energia: Array.from({ length: 30 }, (_, i) => {
+    energia: Array.from({ length: 90 }, (_, i) => {
         const date = new Date();
-        date.setDate(date.getDate() - (29 - i));
+        date.setDate(date.getDate() - (89 - i));
         return {
             id: i + 1,
             fecha: date.toISOString().split('T')[0],
-            generacion_electrica_total_kwh_dia: 12000 + Math.floor(Math.random() * 2000),
-            flujo_biogas_kg_dia: 8000 + Math.floor(Math.random() * 1500),
-            horas_funcionamiento_motor_chp_dia: 22 + Math.random() * 2,
-            autoconsumo_porcentaje: 10 + Math.random() * 5,
+            generacion_electrica_total_kwh_dia: 11000 + Math.floor(Math.random() * 3000),
+            flujo_biogas_kg_dia: 7500 + Math.floor(Math.random() * 2000),
+            horas_funcionamiento_motor_chp_dia: 20 + Math.random() * 4,
+            autoconsumo_porcentaje: 8 + Math.random() * 10,
         };
     }),
-    analisis_fos_tac: Array.from({ length: 15 }, (_, i) => {
+    analisis_fos_tac: Array.from({ length: 45 }, (_, i) => {
         const date = new Date();
-        date.setDate(date.getDate() - i);
-        const tac = 4000 + Math.random() * 1000;
-        const ratio = 0.25 + Math.random() * 0.2;
+        date.setDate(date.getDate() - (i*2)); // Every other day for ~90 days
+        const tac = 3500 + Math.random() * 2000;
+        const ratio = 0.2 + Math.random() * 0.25;
         const fos = tac * ratio;
         return {
             id: i + 1,
@@ -94,18 +94,19 @@ if (supabaseUrl && supabaseAnonKey) {
             equipo_id: 1, // Biodigestor #1
         };
     }),
-    lecturas_gas: Array.from({ length: 15 }, (_, i) => {
+    lecturas_gas: Array.from({ length: 180 }, (_, i) => { // 2 readings a day for 90 days
         const date = new Date();
-        date.setHours(date.getHours() - i*2);
+        date.setDate(date.getDate() - Math.floor(i / 2));
+        date.setHours(date.getHours() - (i % 12));
         return {
             id: i + 1,
             fecha_hora: date.toISOString(),
-            ch4_porcentaje: 55 + Math.random() * 5,
-            co2_porcentaje: 40 + Math.random() * 5,
+            ch4_porcentaje: 53 + Math.random() * 8,
+            co2_porcentaje: 38 + Math.random() * 8,
             o2_porcentaje: 0.1 + Math.random() * 0.5,
-            h2s_ppm: 50 + Math.random() * 150,
-            potencia_exacta_kw: 480 + Math.random() * 40,
-            equipo_id_fk: 6, // Analizador de Gas #6
+            h2s_ppm: 30 + Math.random() * 200,
+            potencia_exacta_kw: 470 + Math.random() * 60,
+            equipo_id_fk: 1, // Changed to Biodigestor #1 to match GraphsPage query
         };
     }),
     alimentacion_biodigestor: Array.from({ length: 10 }, (_, i) => {
@@ -133,11 +134,11 @@ if (supabaseUrl && supabaseAnonKey) {
         { id: 3, nombre: 'Glicerina Cruda', categoria: 'Industrial' },
         { id: 4, nombre: 'Residuos Frigorífico', categoria: 'Industrial' },
     ],
-    detalle_ingreso_sustrato: Array.from({ length: 20 }, (_, i) => ({
+    detalle_ingreso_sustrato: Array.from({ length: 120 }, (_, i) => ({ // ~4 entries a day for 30 days
         id: i + 1,
         sustrato_id: (i % 4) + 1,
         cantidad_kg: 5000 + Math.random() * 15000,
-        created_at: new Date(new Date().setDate(new Date().getDate() - i)).toISOString(),
+        created_at: new Date(new Date().setDate(new Date().getDate() - Math.floor(i / 4))).toISOString(),
         id_viaje_ingreso_fk: i + 1,
         sustratos: { nombre: ['Estiércol Bovino', 'Silaje de Maíz', 'Glicerina Cruda', 'Residuos Frigorífico'][i % 4] },
         ingresos_viaje_camion: { numero_remito_general: `R-00${i+1}` },

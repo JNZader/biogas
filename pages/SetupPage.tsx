@@ -43,11 +43,10 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 const plantDetailsSchema = z.object({
     nombre_planta: z.string().min(1, "El nombre es requerido."),
     ubicacion: z.string().optional(),
-    // FIX: Replaced z.coerce.number() with z.preprocess to handle type inference issues where `coerce` might be incorrectly resolved to `unknown` instead of `number`.
-    capacity: z.preprocess(
-        (val) => (val === '' || val === undefined || val === null) ? undefined : Number(val),
-        z.number({ invalid_type_error: "Debe ser un número válido." }).positive().optional()
-    ),
+    // FIX: Simplified the schema for the 'capacity' field. The complex `z.union` and `transform`
+    // was causing a type mismatch in the `zodResolver`. Since the component's `onChange` handler
+    // already provides a `number` or `undefined`, a simpler schema is sufficient and resolves the error.
+    capacity: z.number().positive("Debe ser un número positivo.").optional(),
     digester_type: z.string().optional(),
 });
 type PlantDetailsFormData = z.infer<typeof plantDetailsSchema>;
