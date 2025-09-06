@@ -14,7 +14,7 @@ import { Select } from '../components/ui/Select';
 import { useAuthorization } from '../hooks/useAuthorization';
 import { cn } from '../lib/utils';
 import { useGraphsPageStore } from '../stores/graphsPageStore';
-import { Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
 import { Switch } from '../components/ui/Switch';
 import { Input } from '../components/ui/Input';
@@ -117,6 +117,27 @@ const CustomizeGraphsModal: React.FC<{ isOpen: boolean; onClose: () => void; }> 
     );
 };
 
+const renderActiveShape = (props: any) => {
+  const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
+  return (
+    <g>
+      <text x={cx} y={cy} dy={8} textAnchor="middle" fill={fill}>
+        {payload.name}
+      </text>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius + 10}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+      />
+    </g>
+  );
+};
+
+
 const GraphsPage: React.FC = () => {
     const themeColors = useThemeColors();
     const { equipos } = useSupabaseData();
@@ -129,6 +150,7 @@ const GraphsPage: React.FC = () => {
     const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
     const [energyPrice, setEnergyPrice] = useState<number>(70); // Price in USD per MWh
     const { charts } = useGraphsPageStore();
+    const [selectedSubstrate, setSelectedSubstrate] = useState<string | null>(null);
 
     React.useEffect(() => {
         if (!selectedBiodigesterId && biodigestores.length > 0) {
@@ -155,14 +177,18 @@ const GraphsPage: React.FC = () => {
             'Glicerina Cruda': 0.05,
             'Residuos Frigorífico': 0.02,
         };
+        
+        const filteredSubstrateData = selectedSubstrate 
+            ? (data.substrateData || []).filter(item => (item.sustratos as any)?.nombre === selectedSubstrate)
+            : (data.substrateData || []);
 
         // --- KPI & Mock Data Calculations ---
         const totalEnergyKWh = (data.energyData || []).reduce((sum, d) => sum + (d.generacion_electrica_total_kwh_dia || 0), 0);
         const totalChpHours = (data.energyData || []).reduce((sum, d) => sum + (d.horas_funcionamiento_motor_chp_dia || 0), 0);
         const avgCh4 = data.gasHistoryData && data.gasHistoryData.length > 0 ? data.gasHistoryData.reduce((sum, d) => sum + (d.ch4_porcentaje || 0), 0) / data.gasHistoryData.length : 0;
         const chpUptime = timeRange > 0 ? (totalChpHours / (timeRange * 24)) * 100 : 0;
-        const totalSubstrateKg = (data.substrateData || []).reduce((sum, d) => sum + d.cantidad_kg, 0);
-        const totalSubstrateCost = (data.substrateData as RawSubstrateItem[] || []).reduce((sum, item) => {
+        const totalSubstrateKg = (filteredSubstrateData || []).reduce((sum, d) => sum + d.cantidad_kg, 0);
+        const totalSubstrateCost = (filteredSubstrateData as RawSubstrateItem[] || []).reduce((sum, item) => {
             const cost = MOCK_COST_PER_KG_USD[item.sustratos?.nombre || ''] || 0.02;
             return sum + (item.cantidad_kg * cost);
         }, 0);
@@ -196,7 +222,7 @@ const GraphsPage: React.FC = () => {
                 monthlyData[monthKey].revenue += ((d.generacion_electrica_total_kwh_dia || 0) / 1000) * energyPrice;
             }
         });
-        (data.substrateData as RawSubstrateItem[] || []).forEach(item => {
+        (filteredSubstrateData as RawSubstrateItem[] || []).forEach(item => {
             const monthKey = format(new Date(item.created_at), 'yyyy-MM');
             if (monthlyData[monthKey] && item.sustratos) {
                  const cost = MOCK_COST_PER_KG_USD[item.sustratos.nombre] || 0.02;
@@ -210,7 +236,7 @@ const GraphsPage: React.FC = () => {
         }));
 
         const dailyMix: Record<string, Record<string, number>> = {};
-        (data.substrateData as RawSubstrateItem[] || []).forEach((item) => {
+        (filteredSubstrateData as RawSubstrateItem[] || []).forEach((item) => {
             if (item.sustratos) {
                 const dateStr = item.created_at.split('T')[0];
                 if (!dailyMix[dateStr]) dailyMix[dateStr] = {};
@@ -269,7 +295,7 @@ const GraphsPage: React.FC = () => {
             materialBalanceData, contractPerformanceData, annualGoalData,
             annualGoalMetrics: { current: currentProductionMwh, goal: annualGoalMwh }
         };
-    }, [data, timeRange, energyPrice]);
+    }, [data, timeRange, energyPrice, selectedSubstrate]);
     
     const isSuperAdmin = role === 'Super Admin';
     const isAdmin = role === 'Admin';
@@ -322,6 +348,16 @@ const GraphsPage: React.FC = () => {
       );
     };
 
+    const handlePieClick = (data: any) => {
+        const clickedName = data.name;
+        setSelectedSubstrate(prev => (prev === clickedName ? null : clickedName));
+    };
+
+    const activeIndex = useMemo(() => {
+        if (!memoizedData || !selectedSubstrate) return -1;
+        return memoizedData.substrateMixData.findIndex(d => d.name === selectedSubstrate);
+    }, [memoizedData, selectedSubstrate]);
+
     const chartComponents: Record<string, React.ReactNode> = memoizedData ? {
         energyProduction: <Card><CardHeader><CardTitle>Producción vs. Consumo de Energía (kWh)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.energyProductionData, <ResponsiveContainer><BarChart data={memoizedData.energyProductionData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend /><Bar dataKey="Energía Exportada" stackId="a" fill={themeColors.primary} /><Bar dataKey="Autoconsumo" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>, "Producción de Energía")}</CardContent></Card>,
         chpUptime: <Card><CardHeader><CardTitle>Disponibilidad Diaria del Motor (CHP)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.chpUptimeData, <ResponsiveContainer><BarChart data={memoizedData.chpUptimeData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis domain={[0, 24]} /><Tooltip /><ReferenceLine y={24} strokeDasharray="3 3" /><Bar dataKey="Horas de Funcionamiento" fill={themeColors.primary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>, "Disponibilidad del Motor")}</CardContent></Card>,
@@ -333,7 +369,8 @@ const GraphsPage: React.FC = () => {
         contractPerformance: <Card><CardHeader><CardTitle>Rendimiento de Contratos (MWh)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.contractPerformanceData, <ResponsiveContainer><BarChart data={memoizedData.contractPerformanceData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="anio" label={{ value: 'Año de Contrato', position: 'insideBottom', offset: -5 }} /><YAxis /><Tooltip /><Legend /><Bar dataKey="Energía generada" stackId="a" fill={themeColors.primary} /><Bar dataKey="Diferencial" stackId="a" fill={themeColors.secondary} radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>, "Rendimiento de Contratos")}</CardContent></Card>,
         annualGoalGauge: <Card><CardHeader><CardTitle>Progreso vs Objetivo Anual</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.annualGoalData, <ResponsiveContainer><PieChart><Pie data={memoizedData.annualGoalData} dataKey="value" cx="50%" cy="50%" innerRadius={80} outerRadius={110} startAngle={180} endAngle={0} paddingAngle={2} labelLine={false} label={renderGaugeLabel}>{memoizedData.annualGoalData.map((entry, index) => <Cell key={`cell-${index}`} fill={index === 0 ? themeColors.primary : themeColors.textSecondary + '33'} />)}</Pie><Tooltip formatter={(value: number) => value.toLocaleString('es-AR')} /></PieChart></ResponsiveContainer>, "Objetivo Anual")}</CardContent></Card>,
         substrateEvolution: <Card><CardHeader><CardTitle>Evolución de Ingreso de Sustratos (Tn)</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.dietEvolutionData, <ResponsiveContainer><AreaChart data={memoizedData.dietEvolutionData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip /><Legend />{Object.keys(memoizedData.totalSubstrateMix).map((sustrato, i) => <Area key={sustrato} type="monotone" dataKey={sustrato} stackId="1" stroke={SUBSTRATE_CHART_COLORS[i % SUBSTRATE_CHART_COLORS.length]} fill={SUBSTRATE_CHART_COLORS[i % SUBSTRATE_CHART_COLORS.length]} />)}</AreaChart></ResponsiveContainer>, "Evolución de Sustratos")}</CardContent></Card>,
-        substrateMix: <Card><CardHeader><CardTitle>Mix Total de Sustratos</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.substrateMixData, <ResponsiveContainer><PieChart><Pie data={memoizedData.substrateMixData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={renderCustomizedPieLabel}>{memoizedData.substrateMixData.map((_entry, index) => <Cell key={`cell-${index}`} fill={SUBSTRATE_CHART_COLORS[index % SUBSTRATE_CHART_COLORS.length]} />)}</Pie><Tooltip formatter={(value: number) => `${value.toLocaleString('es-AR')} kg`} /><Legend /></PieChart></ResponsiveContainer>, "Mix de Sustratos")}</CardContent></Card>,
+        // FIX: Removed the `activeIndex` prop from the `Pie` component to resolve a TypeScript error. The active slice will now be highlighted on hover instead of on click.
+        substrateMix: <Card><CardHeader><CardTitle>Mix Total de Sustratos</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.substrateMixData, <ResponsiveContainer><PieChart><Pie data={memoizedData.substrateMixData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={renderCustomizedPieLabel} onClick={handlePieClick} activeShape={renderActiveShape}>{memoizedData.substrateMixData.map((_entry, index) => <Cell key={`cell-${index}`} fill={SUBSTRATE_CHART_COLORS[index % SUBSTRATE_CHART_COLORS.length]} />)}</Pie><Tooltip formatter={(value: number) => `${value.toLocaleString('es-AR')} kg`} /><Legend /></PieChart></ResponsiveContainer>, "Mix de Sustratos")}</CardContent></Card>,
         biogasQualityTrend: <Card><CardHeader><CardTitle>Tendencia de Calidad de Biogás</CardTitle></CardHeader><CardContent>{renderChartOrMessage(memoizedData.biogasQualityData, <ResponsiveContainer><LineChart data={memoizedData.biogasQualityData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis yAxisId="left" domain={[40, 70]} label={{ value: '%', angle: -90, position: 'insideLeft' }} /><YAxis yAxisId="right" orientation="right" domain={[0, 'dataMax + 50']} label={{ value: 'ppm', angle: 90, position: 'insideRight' }} /><Tooltip /><Legend /><Line yAxisId="left" type="monotone" dataKey="CH4 (%)" stroke={themeColors.secondary} dot={false} /><Line yAxisId="left" type="monotone" dataKey="CO2 (%)" stroke={themeColors.primary} dot={false} /><Line yAxisId="right" type="monotone" dataKey="H2S (ppm)" stroke={themeColors.accent} dot={false} /></LineChart></ResponsiveContainer>, "Tendencia Calidad Biogás")}</CardContent></Card>,
     } : {};
     
@@ -402,6 +439,14 @@ const GraphsPage: React.FC = () => {
                 </div>
                 {!memoizedData ? <p className="text-center text-text-secondary py-10">Cargando dashboard gerencial...</p> : (
                     <>
+                        {selectedSubstrate && (
+                            <div className="flex items-center gap-2 bg-primary/10 text-primary text-sm font-medium px-3 py-1.5 rounded-full mb-4 w-fit">
+                                <span>Filtrando por: <strong>{selectedSubstrate}</strong></span>
+                                <button onClick={() => setSelectedSubstrate(null)} className="rounded-full hover:bg-primary/20 p-0.5" aria-label="Quitar filtro">
+                                    <XMarkIcon className="h-4 w-4" />
+                                </button>
+                            </div>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <KpiCard title="% Generación" value={memoizedData.kpiData.generationPercentage} />
                             <KpiCard title="% Contratos Cumplidos" value={memoizedData.kpiData.contractsFulfilled} />
