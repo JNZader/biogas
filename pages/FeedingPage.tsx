@@ -85,9 +85,8 @@ const analysisSchema = z.object({
 const logFeedingSchema = z.object({
     source: z.string().min(1, "Este campo es requerido."),
     destination: z.string().min(1, "Este campo es requerido."),
-    // FIX: Replaced `z.coerce.number` with an explicit `z.number({ coerce: true, ... })` to resolve a TypeScript error related to an unknown property `invalid_type_error`. The original usage was likely incompatible with the Zod version in the project. This change maintains the coercion behavior and custom error message while ensuring the schema is valid, which resolves a cascade of type errors in `react-hook-form` that were caused by Zod failing to infer the correct type for the `quantity` field.
-    quantity: z.number({ 
-        coerce: true, 
+    // FIX: Replaced invalid `z.number({ coerce: true, ... })` syntax with the correct `z.coerce.number()`. The `coerce` flag is not a valid property for the `z.number()` options object. Using `z.coerce.number()` ensures that form input is correctly converted to a number before validation, resolving potential type errors in react-hook-form.
+    quantity: z.coerce.number({ 
         invalid_type_error: "Debe ingresar un número." 
     }).positive({ message: "La cantidad debe ser mayor a cero." }),
     unit: z.enum(['kg', 'm³']),

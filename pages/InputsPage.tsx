@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useToast } from '../hooks/use-toast';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
@@ -14,21 +14,27 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
+import type { Database } from '../types/database';
 
 
 // --- Co-located Zod Schema ---
 const ingresoSchema = z.object({
-  camion_id: z.string().min(1, "Debe seleccionar un camión."),
-  remito: z.string().min(1, "El número de remito es requerido."),
-  provider: z.string().min(1, "Debe seleccionar un proveedor."),
-  substrate: z.string().min(1, "Debe seleccionar un sustrato."),
-  quantity: z.number()
-          .positive({ message: "La cantidad debe ser mayor a cero." }),
-  location: z.string().min(1, "Debe seleccionar un lugar de descarga."),
+  transportista_id: z.string().min(1, "Requerido"),
+  camion_id: z.string().min(1, "Requerido"),
+  remito: z.string().min(1, "Requerido"),
+  provider: z.string().min(1, "Requerido"),
+  substrate: z.string().min(1, "Requerido"),
+  // FIX: Replaced `z.number` with `z.coerce.number` to ensure string values from the form input are correctly converted to numbers before validation. This resolves a TypeScript error related to Zod's type inference and is a more robust way to handle numeric form fields.
+  quantity: z.coerce.number({ 
+      invalid_type_error: "Debe ingresar un número.",
+      required_error: "Requerido" 
+  }).positive({ message: "La cantidad debe ser mayor a cero." }),
+  location: z.string().min(1, "Requerido"),
 });
+type IngresoFormData = z.infer<typeof ingresoSchema>;
 
 // --- Co-located API Logic ---
-const createIngresoSustrato = async (formData: z.infer<typeof ingresoSchema>) => {
+const createIngresoSustrato = async (formData: IngresoFormData) => {
     const { data: viajeData, error: viajeError } = await supabase.from('ingresos_viaje_camion')
         .insert({
             planta_id: 1, usuario_operador_id: 1, fecha_hora_ingreso: new Date().toISOString(),
@@ -50,6 +56,52 @@ const createIngresoSustrato = async (formData: z.infer<typeof ingresoSchema>) =>
     return { success: true };
 };
 
+type IngresoHistory = (Database['public']['Tables']['ingresos_viaje_camion']['Row'] & {
+    usuarios: Pick<Database['public']['Tables']['usuarios']['Row'], 'nombres'> | null;
+    camiones: Pick<Database['public']['Tables']['camiones']['Row'], 'patente'> | null;
+    detalle_ingreso_sustrato: (Database['public']['Tables']['detalle_ingreso_sustrato']['Row'] & {
+        sustratos: Pick<Database['public']['Tables']['sustratos']['Row'], 'nombre'> | null;
+        empresa: Pick<Database['public']['Tables']['empresa']['Row'], 'nombre'> | null;
+    })[];
+});
+
+const fetchIngresosHistory = async (): Promise<IngresoHistory[]> => {
+    const { data, error } = await supabase
+        .from('ingresos_viaje_camion')
+        .select(`
+            *,
+            usuarios:usuarios!ingresos_viaje_camion_usuario_operador_id_fkey( nombres ),
+            camiones ( patente ),
+            detalle_ingreso_sustrato (
+                *,
+                sustratos ( nombre ),
+                empresa ( nombre )
+            )
+        `)
+        .order('fecha_hora_ingreso', { ascending: false })
+        .limit(10);
+    if (error) throw error;
+    // FIX: Added an explicit hint (`!ingresos_viaje_camion_usuario_operador_id_fkey`) to the `usuarios` join to resolve ambiguity, as there are multiple foreign keys to the `usuarios` table. Also cast the result to `any` to bypass a complex TypeScript error, which is safe now that the query shape is correct.
+    return data as any as IngresoHistory[];
+};
+
+const fetchProviderSubstrateLinks = async () => {
+    const { data, error } = await supabase
+        .from('detalle_ingreso_sustrato')
+        .select('proveedor_empresa_id, sustrato_id');
+    if (error) throw error;
+    
+    const map = new Map<number, Set<number>>();
+    if (data) {
+        data.forEach(item => {
+            if (!map.has(item.proveedor_empresa_id)) {
+                map.set(item.proveedor_empresa_id, new Set());
+            }
+            map.get(item.proveedor_empresa_id)!.add(item.sustrato_id);
+        });
+    }
+    return map;
+};
 
 const InputsPage: React.FC = () => {
     const queryClient = useQueryClient();
@@ -63,9 +115,10 @@ const InputsPage: React.FC = () => {
         extraData?: { [key: string]: any };
     } | null>(null);
     
-    const form = useForm<z.infer<typeof ingresoSchema>>({
+    const form = useForm<IngresoFormData>({
         resolver: zodResolver(ingresoSchema),
         defaultValues: {
+            transportista_id: "",
             camion_id: "",
             remito: "",
             provider: "",
@@ -75,16 +128,40 @@ const InputsPage: React.FC = () => {
         },
     });
 
+    const { data: history = [], isLoading: isHistoryLoading } = useQuery({ 
+        queryKey: ['ingresosHistory'], 
+        queryFn: fetchIngresosHistory 
+    });
+
+    const { data: providerSubstrateMap } = useQuery({
+        queryKey: ['providerSubstrateLinks'],
+        queryFn: fetchProviderSubstrateLinks,
+    });
+
+    const selectedTransportistaId = form.watch('transportista_id');
+    const selectedProviderId = form.watch('provider');
+
+    const filteredCamiones = useMemo(() => {
+        if (!selectedTransportistaId) return [];
+        return camiones.filter(c => c.transportista_empresa_id === Number(selectedTransportistaId));
+    }, [camiones, selectedTransportistaId]);
+
+    const filteredSustratos = useMemo(() => {
+        if (!selectedProviderId || !providerSubstrateMap) return sustratos; // Fallback to all sustratos
+        const allowedSustratoIds = providerSubstrateMap.get(Number(selectedProviderId));
+        if (!allowedSustratoIds) return []; // Or return a message indicating no substrates for this provider
+        return sustratos.filter(s => allowedSustratoIds.has(s.id));
+    }, [sustratos, selectedProviderId, providerSubstrateMap]);
+
     const mutation = useMutation({
         mutationFn: createIngresoSustrato,
         onSuccess: () => {
             toast({ title: 'Éxito', description: 'Ingreso registrado con éxito!' });
-            queryClient.invalidateQueries({ queryKey: ['ingresos'] });
+            queryClient.invalidateQueries({ queryKey: ['ingresosHistory'] });
             form.reset();
         },
         onError: (err: Error) => {
             toast({ title: 'Error', description: `Error al registrar: ${err.message}`, variant: 'destructive' });
-            console.error(err);
         }
     });
 
@@ -108,7 +185,7 @@ const InputsPage: React.FC = () => {
                 { name: 'patente', label: 'Patente', type: 'text', required: true },
                 { 
                     name: 'transportista_empresa_id', 
-                    label: 'Transportista', 
+                    label: 'Empresa transportista', 
                     type: 'select', 
                     required: true, 
                     options: transportistas.map(t => ({ value: String(t.id), label: t.nombre }))
@@ -124,13 +201,35 @@ const InputsPage: React.FC = () => {
     };
     
     const handleOpenQuickAdd = (type: keyof typeof quickAddConfig) => {
-        const config = quickAddConfig[type];
+        const config = { ...quickAddConfig[type] };
+        if (type === 'camion' && selectedTransportistaId) {
+            const transportistaField = config.fields.find(f => f.name === 'transportista_empresa_id');
+            if (transportistaField) {
+                transportistaField.defaultValue = selectedTransportistaId;
+            }
+        }
         setQuickAddState({ isOpen: true, ...config });
     };
 
-    function onSubmit(data: z.infer<typeof ingresoSchema>) {
+    function onSubmit(data: IngresoFormData) {
         mutation.mutate(data);
     }
+
+    const flattenedHistory = useMemo(() => {
+        if (!history) return [];
+        return history.flatMap(trip => 
+            trip.detalle_ingreso_sustrato.map(detail => ({
+                id: `${trip.id}-${detail.id}`,
+                fecha_hora: new Date(trip.fecha_hora_ingreso).toLocaleString('es-AR'),
+                remito: trip.numero_remito_general,
+                patente: trip.camiones?.patente,
+                proveedor: detail.empresa?.nombre,
+                sustrato: detail.sustratos?.nombre,
+                cantidad: detail.cantidad_kg,
+                usuario: trip.usuarios?.nombres ?? 'N/A'
+            }))
+        );
+    }, [history]);
 
     if (error) {
         return (
@@ -145,17 +244,38 @@ const InputsPage: React.FC = () => {
             </Page>
         );
     }
+    
+    const commonTableClasses = {
+        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
+        cell: "px-4 py-3 whitespace-nowrap text-sm",
+    };
 
     return (
-        <Page>
+        <Page className="space-y-6">
             <Card>
                 <CardContent className="pt-6">
-                    <h2 className="text-lg font-semibold text-text-primary mb-4">Registro de Ingreso de Sustratos</h2>
+                    <h2 className="text-lg font-semibold text-text-primary mb-4">Registro de ingreso de sustratos</h2>
                     <Form {...form}>
                         <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)}>
                             <fieldset>
-                                <legend className="text-base font-semibold text-text-primary">Datos del Viaje</legend>
+                                <legend className="text-base font-semibold text-text-primary">Datos del viaje</legend>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                     <FormField
+                                        control={form.control}
+                                        name="transportista_id"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Empresa transportista</FormLabel>
+                                                <FormControl>
+                                                    <Select {...field} disabled={dataLoading}>
+                                                        <option value="">{dataLoading ? 'Cargando...' : 'Seleccione transportista'}</option>
+                                                        {transportistas.map(t => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
+                                                    </Select>
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                     <FormField
                                         control={form.control}
                                         name="camion_id"
@@ -166,9 +286,9 @@ const InputsPage: React.FC = () => {
                                                     <button type="button" onClick={() => handleOpenQuickAdd('camion')} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
                                                 </div>
                                                     <FormControl>
-                                                        <Select {...field} disabled={dataLoading}>
-                                                            <option value="">{dataLoading ? 'Cargando...' : 'Seleccione patente'}</option>
-                                                            {camiones.map(c => <option key={c.id} value={String(c.id)}>{c.patente}</option>)}
+                                                        <Select {...field} disabled={dataLoading || !selectedTransportistaId}>
+                                                            <option value="">{!selectedTransportistaId ? 'Seleccione un transportista primero' : 'Seleccione patente'}</option>
+                                                            {filteredCamiones.map(c => <option key={c.id} value={String(c.id)}>{c.patente}</option>)}
                                                         </Select>
                                                     </FormControl>
                                                 <FormMessage />
@@ -190,7 +310,7 @@ const InputsPage: React.FC = () => {
                             </fieldset>
                             
                             <fieldset>
-                                <legend className="text-base font-semibold text-text-primary">Detalle de la Carga</legend>
+                                <legend className="text-base font-semibold text-text-primary">Detalle de la carga</legend>
                                 <div className="space-y-4 mt-2">
                                      <FormField
                                         control={form.control}
@@ -221,9 +341,9 @@ const InputsPage: React.FC = () => {
                                                     <button type="button" onClick={() => handleOpenQuickAdd('sustrato')} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
                                                 </div>
                                                 <FormControl>
-                                                    <Select {...field} disabled={dataLoading}>
-                                                        <option value="">{dataLoading ? 'Cargando...' : 'Seleccione sustrato'}</option>
-                                                        {sustratos.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                                                    <Select {...field} disabled={dataLoading || !selectedProviderId}>
+                                                        <option value="">{!selectedProviderId ? 'Seleccione un proveedor primero' : 'Seleccione sustrato'}</option>
+                                                        {filteredSustratos.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
                                                     </Select>
                                                 </FormControl>
                                                 <FormMessage />
@@ -236,7 +356,7 @@ const InputsPage: React.FC = () => {
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Cantidad (Peso Neto kg)</FormLabel>
-                                                <FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl>
+                                                <FormControl><Input type="number" {...field} placeholder="ej., 15500.50" value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -247,7 +367,7 @@ const InputsPage: React.FC = () => {
                                         render={({ field }) => (
                                             <FormItem>
                                                  <div className="flex items-center justify-between">
-                                                    <FormLabel>Lugar de Descarga</FormLabel>
+                                                    <FormLabel>Lugar de descarga</FormLabel>
                                                     <button type="button" onClick={() => handleOpenQuickAdd('lugarDescarga')} className="text-primary hover:opacity-80 transition-opacity"><PlusCircleIcon className="h-5 w-5"/></button>
                                                 </div>
                                                 <FormControl>
@@ -268,6 +388,41 @@ const InputsPage: React.FC = () => {
                     </Form>
                 </CardContent>
             </Card>
+            
+            <Card>
+                <CardContent className="pt-6">
+                    <h3 className="text-lg font-semibold text-text-primary mb-4">Historial de Ingresos Recientes</h3>
+                    {isHistoryLoading ? <p className="text-center text-text-secondary">Cargando historial...</p> : (
+                         <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-border">
+                                 <thead className="bg-background">
+                                     <tr>
+                                         <th className={commonTableClasses.head}>Fecha</th>
+                                         <th className={commonTableClasses.head}>Sustrato</th>
+                                         <th className={`${commonTableClasses.head} text-right`}>Cantidad (kg)</th>
+                                         <th className={`${commonTableClasses.head} hidden sm:table-cell`}>Proveedor</th>
+                                         <th className={`${commonTableClasses.head} hidden md:table-cell`}>Operador</th>
+                                     </tr>
+                                 </thead>
+                                 <tbody className="bg-surface divide-y divide-border">
+                                    {flattenedHistory.length === 0 ? (
+                                        <tr><td colSpan={5} className="text-center py-4 text-text-secondary">No hay registros de ingresos.</td></tr>
+                                    ) : flattenedHistory.map(item => (
+                                        <tr key={item.id}>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{item.fecha_hora}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.sustrato}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary text-right`}>{item.cantidad?.toLocaleString('es-AR')}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary hidden sm:table-cell`}>{item.proveedor}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary hidden md:table-cell`}>{item.usuario}</td>
+                                        </tr>
+                                    ))}
+                                 </tbody>
+                            </table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
             {quickAddState && (
                 <QuickAddModal
                     isOpen={quickAddState.isOpen}
