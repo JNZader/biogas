@@ -21,6 +21,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Label } from '../components/ui/Label';
 import { useSortableData } from '../hooks/useSortableData';
 import { SortableHeader } from '../components/ui/SortableHeader';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/Dialog';
 
 
 import { 
@@ -29,6 +30,7 @@ import {
     ArrowDownTrayIcon,
     WrenchScrewdriverIcon,
     ChevronDownIcon,
+    CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 
 // --- Type Definitions ---
@@ -51,11 +53,10 @@ interface AlarmDisplayItem {
 }
 
 // --- Co-located Zod Schema ---
-// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const alertRuleSchema = z.object({
   parameter: z.enum(['fosTac', 'ch4']),
   condition: z.enum(['gt', 'lt', 'eq']),
-  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed the object with `required_error` and `invalid_type_error` from `z.number()` to fix a TypeScript error. `z.number()` does not accept `required_error`, and this change aligns with the consistent schema pattern used throughout the project.
   value: z.number().positive("El valor debe ser positivo."),
   severity: z.enum(['info', 'warning', 'critical']),
 });
@@ -74,6 +75,19 @@ const fetchAlarms = async (): Promise<EnrichedAlarma[]> => {
 };
 
 // --- Helper Components ---
+
+const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 focus:outline-none ${
+        active
+          ? 'border-b-2 border-primary text-primary bg-primary/10'
+          : 'text-text-secondary hover:text-text-primary'
+      }`}
+    >
+      {children}
+    </button>
+);
 
 const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -128,7 +142,7 @@ const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; di
 };
 
 const Badge: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-    <span className={cn('px-2 inline-flex text-xs leading-5 font-semibold rounded-full', className)}>
+    <span className={cn('px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full', className)}>
         {children}
     </span>
 );
@@ -138,6 +152,8 @@ const Badge: React.FC<{ children: React.ReactNode; className?: string }> = ({ ch
 const CustomAlertsConfig: React.FC = () => {
     const { toast } = useToast();
     const { rules, addRule, removeRule } = useZustandStore(customAlertsStore);
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; ruleId: string | null }>({ isOpen: false, ruleId: null });
+
 
     const form = useForm<AlertRuleFormData>({
         resolver: zodResolver(alertRuleSchema),
@@ -158,13 +174,26 @@ const CustomAlertsConfig: React.FC = () => {
     const conditionLabels = { gt: 'Mayor que', lt: 'Menor que', eq: 'Igual a' };
     const parameterLabels = { fosTac: 'FOS/TAC', ch4: 'Calidad de Gas (CH4)' };
 
+    const handleDeleteClick = (ruleId: string) => {
+        setDeleteConfirmation({ isOpen: true, ruleId });
+    };
+
+    const handleConfirmDelete = () => {
+        if (deleteConfirmation.ruleId) {
+            removeRule(deleteConfirmation.ruleId);
+            toast({ title: 'Éxito', description: 'Regla eliminada.' });
+        }
+        setDeleteConfirmation({ isOpen: false, ruleId: null });
+    };
+
+
     return (
         <Card>
             <CardHeader><CardTitle>Configurar Alertas Personalizadas</CardTitle></CardHeader>
             <CardContent className="space-y-6">
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
                             <FormField
                                 control={form.control}
                                 name="parameter"
@@ -200,7 +229,9 @@ const CustomAlertsConfig: React.FC = () => {
                                         <FormControl>
                                             <Input type="number" step="0.01" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
                                         </FormControl>
-                                        <FormMessage />
+                                        <div className="h-5">
+                                            <FormMessage />
+                                        </div>
                                     </FormItem>
                                 )}
                             />
@@ -236,7 +267,7 @@ const CustomAlertsConfig: React.FC = () => {
                                         <span className="font-medium">{rule.value}</span>
                                         <Badge className="ml-2 bg-primary/20 text-primary capitalize">{rule.severity}</Badge>
                                     </div>
-                                    <button onClick={() => removeRule(rule.id)} className="p-1 rounded-full hover:bg-error-bg text-error">
+                                    <button onClick={() => handleDeleteClick(rule.id)} className="p-1 rounded-full hover:bg-error-bg text-error">
                                         <TrashIcon className="h-4 w-4" />
                                     </button>
                                 </li>
@@ -245,6 +276,22 @@ const CustomAlertsConfig: React.FC = () => {
                     )}
                 </div>
             </CardContent>
+            <Dialog open={deleteConfirmation.isOpen} onOpenChange={(isOpen) => !isOpen && setDeleteConfirmation({ isOpen: false, ruleId: null })}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirmar Eliminación</DialogTitle>
+                    </DialogHeader>
+                    <div className="p-6 pt-0">
+                        <p className="text-sm text-text-secondary">
+                            ¿Está seguro de que desea eliminar esta regla de alerta? Esta acción no se puede deshacer.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteConfirmation({ isOpen: false, ruleId: null })}>Cancelar</Button>
+                        <Button variant="destructive" onClick={handleConfirmDelete}>Eliminar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Card>
     );
 };
@@ -256,6 +303,7 @@ const AlarmsPage: React.FC = () => {
     const { triggeredAlerts } = useZustandStore(customAlertsStore);
     const navigate = useNavigate();
 
+    const [activeTab, setActiveTab] = useState<'history' | 'config'>('history');
     const [severityFilter, setSeverityFilter] = useState<string>('all');
     const [statusFilter, setStatusFilter] = useState<string>('all');
     
@@ -297,14 +345,23 @@ const AlarmsPage: React.FC = () => {
 
     const getSeverityBadgeClass = useCallback((severity: Severity) => {
         switch (severity) {
-            case 'critical': return 'bg-error-bg text-error';
-            case 'warning': return 'bg-warning-bg text-warning';
-            default: return 'bg-info-bg text-info';
+            case 'critical': return 'bg-error text-white';
+            case 'warning': return 'bg-warning text-black';
+            default: return 'bg-sky-500 text-white';
         }
     }, []);
 
+    const getSeverityRowClass = (severity: Severity, isResolved: boolean) => {
+        if (isResolved) return 'hover:bg-background/50';
+        switch (severity) {
+            case 'critical': return 'bg-error-bg/50 border-l-4 border-error hover:bg-error-bg/70';
+            case 'warning': return 'bg-warning-bg/50 border-l-4 border-warning hover:bg-warning-bg/70';
+            case 'info': return 'bg-primary/5 border-l-4 border-primary hover:bg-primary/10';
+            default: return 'hover:bg-background/50';
+        }
+    };
+
     const handleCreateTask = (alarm: AlarmDisplayItem) => {
-        // FIX: Used an updater function for the 'state' property to comply with TanStack Router's type definitions and resolve the 'prefillTask' property error.
         navigate({
             to: '/maintenance',
             state: (old) => ({
@@ -334,79 +391,111 @@ const AlarmsPage: React.FC = () => {
     }
 
     return (
-        <Page className="space-y-6">
-            <CustomAlertsConfig />
-            
-            <Card>
-                <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                        <CardTitle>Historial de Alarmas</CardTitle>
-                        <div className="flex items-center gap-4">
-                             <div>
-                                <Label htmlFor="severity-filter">Severidad</Label>
-                                <Select id="severity-filter" value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}>
-                                    <option value="all">Todas</option>
-                                    <option value="critical">Crítica</option>
-                                    <option value="warning">Advertencia</option>
-                                    <option value="info">Info</option>
-                                </Select>
+        <Page>
+            <div className="mb-4 border-b border-border">
+                <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+                    <TabButton active={activeTab === 'history'} onClick={() => setActiveTab('history')}>
+                        Historial de Alarmas
+                    </TabButton>
+                    <TabButton active={activeTab === 'config'} onClick={() => setActiveTab('config')}>
+                        Configurar Alertas
+                    </TabButton>
+                </nav>
+            </div>
+
+            {activeTab === 'config' && (
+                <div className="mt-6">
+                    <CustomAlertsConfig />
+                </div>
+            )}
+
+            {activeTab === 'history' && (
+                <div className="mt-6">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                                <CardTitle>Historial de Alarmas</CardTitle>
+                                <div className="flex items-center gap-4">
+                                     <div>
+                                        <Label htmlFor="severity-filter">Severidad</Label>
+                                        <Select id="severity-filter" value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}>
+                                            <option value="all">Todas</option>
+                                            <option value="critical">Crítica</option>
+                                            <option value="warning">Advertencia</option>
+                                            <option value="info">Info</option>
+                                        </Select>
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="status-filter">Estado</Label>
+                                        <Select id="status-filter" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                                            <option value="all">Todos</option>
+                                            <option value="active">Activas</option>
+                                            <option value="resolved">Resueltas</option>
+                                        </Select>
+                                    </div>
+                                    <ExportButton data={dataToExport} filename="historial_alarmas" disabled={sortedAlarms.length === 0} />
+                                </div>
                             </div>
-                            <div>
-                                <Label htmlFor="status-filter">Estado</Label>
-                                <Select id="status-filter" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                                    <option value="all">Todos</option>
-                                    <option value="active">Activas</option>
-                                    <option value="resolved">Resueltas</option>
-                                </Select>
-                            </div>
-                            <ExportButton data={dataToExport} filename="historial_alarmas" disabled={sortedAlarms.length === 0} />
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    {/* FIX: Use error.message to display the error string instead of passing the Error object directly as a ReactNode. */}
-                    {error && <p className="text-center text-error mb-4">{error.message}</p>}
-                    {sortedAlarms.length === 0 ? (
-                        <EmptyState
-                            icon={<BellAlertIcon className="mx-auto h-12 w-12" />}
-                            title="Sin Alarmas"
-                            message="No hay alarmas que coincidan con los filtros seleccionados."
-                        />
-                    ) : (
-                        <div className="overflow-x-auto">
-                           <table className="min-w-full divide-y divide-border">
-                               <thead className="bg-background">
-                                   <tr>
-                                       <SortableHeader columnKey="timestamp" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
-                                       <SortableHeader columnKey="alarmType" title="Tipo de Alarma" sortConfig={sortConfig} onSort={requestSort} />
-                                       <SortableHeader columnKey="severity" title="Severidad" sortConfig={sortConfig} onSort={requestSort} />
-                                       <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Descripción</th>
-                                       <th className="relative px-4 py-3"><span className="sr-only">Acciones</span></th>
-                                   </tr>
-                               </thead>
-                               <tbody className="bg-surface divide-y divide-border">
-                                   {sortedAlarms.map(alarm => (
-                                       <tr key={alarm.id} className={cn({ 'bg-amber-50': !alarm.isResolved && alarm.severity === 'warning', 'bg-red-50': !alarm.isResolved && alarm.severity === 'critical' })}>
-                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(alarm.timestamp).toLocaleString('es-AR')}</td>
-                                           <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{alarm.alarmType}</td>
-                                           <td className={commonTableClasses.cell}><Badge className={getSeverityBadgeClass(alarm.severity)}>{alarm.severity.toUpperCase()}</Badge></td>
-                                           <td className={`${commonTableClasses.cell} text-text-primary max-w-sm truncate`}>{alarm.description}</td>
-                                           <td className={`${commonTableClasses.cell} text-right`}>
-                                                {!alarm.isResolved && !alarm.isCustom && (
-                                                    <Button variant="outline" size="sm" onClick={() => handleCreateTask(alarm)}>
-                                                        <WrenchScrewdriverIcon className="h-4 w-4 mr-1" />
-                                                        Crear Tarea
-                                                    </Button>
-                                                )}
-                                           </td>
-                                       </tr>
-                                   ))}
-                               </tbody>
-                           </table>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                        </CardHeader>
+                        <CardContent>
+                            {error && <p className="text-center text-error mb-4">{error.message}</p>}
+                            {sortedAlarms.length === 0 ? (
+                                <EmptyState
+                                    icon={<BellAlertIcon className="mx-auto h-12 w-12" />}
+                                    title="Sin Alarmas"
+                                    message="No hay alarmas que coincidan con los filtros seleccionados."
+                                />
+                            ) : (
+                                <div className="overflow-x-auto">
+                                   <table className="min-w-full divide-y divide-border">
+                                       <thead className="bg-background">
+                                           <tr>
+                                               <SortableHeader columnKey="timestamp" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
+                                               <SortableHeader columnKey="alarmType" title="Tipo de Alarma" sortConfig={sortConfig} onSort={requestSort} />
+                                               <SortableHeader columnKey="severity" title="Severidad" sortConfig={sortConfig} onSort={requestSort} />
+                                               <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Descripción</th>
+                                               <SortableHeader columnKey="isResolved" title="Estado" sortConfig={sortConfig} onSort={requestSort} />
+                                               <th className="relative px-4 py-3"><span className="sr-only">Acciones</span></th>
+                                           </tr>
+                                       </thead>
+                                       <tbody className="bg-surface divide-y divide-border">
+                                           {sortedAlarms.map(alarm => (
+                                               <tr key={alarm.id} className={cn('transition-colors', getSeverityRowClass(alarm.severity, alarm.isResolved))}>
+                                                   <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(alarm.timestamp).toLocaleString('es-AR')}</td>
+                                                   <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{alarm.alarmType}</td>
+                                                   <td className={commonTableClasses.cell}><Badge className={getSeverityBadgeClass(alarm.severity)}>{alarm.severity.toUpperCase()}</Badge></td>
+                                                   <td className={`${commonTableClasses.cell} text-text-primary max-w-sm truncate`}>{alarm.description}</td>
+                                                   <td className={commonTableClasses.cell}>
+                                                        {alarm.isResolved ? (
+                                                            <div className="flex items-center gap-1.5 text-success">
+                                                                <CheckCircleIcon className="h-5 w-5" />
+                                                                <span className="text-xs font-medium">Resuelta</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-1.5 text-error">
+                                                                <div className="h-2 w-2 rounded-full bg-error animate-pulse" />
+                                                                <span className="text-xs font-medium">Activa</span>
+                                                            </div>
+                                                        )}
+                                                   </td>
+                                                   <td className={`${commonTableClasses.cell} text-right`}>
+                                                        {!alarm.isResolved && !alarm.isCustom && (
+                                                            <Button variant="outline" size="sm" onClick={() => handleCreateTask(alarm)}>
+                                                                <WrenchScrewdriverIcon className="h-4 w-4 mr-1" />
+                                                                Crear Tarea
+                                                            </Button>
+                                                        )}
+                                                   </td>
+                                               </tr>
+                                           ))}
+                                       </tbody>
+                                   </table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </Page>
     );
 };

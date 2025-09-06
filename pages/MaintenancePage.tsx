@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useRouterState } from '@tanstack/react-router';
+import { useRouterState, useNavigate } from '@tanstack/react-router';
 import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -297,13 +297,17 @@ const Tasks: React.FC = () => {
     });
 
     const routerState = useRouterState();
-    const prefillData = (routerState.location.state as { prefillTask?: any } | undefined)?.prefillTask;
+    const navigate = useNavigate();
 
     useEffect(() => {
+        const prefillData = (routerState.location.state as { prefillTask?: any } | undefined)?.prefillTask;
         if (prefillData?.equipo_id) {
             handleOpenModal(prefillData);
+            // Clear the state to prevent the modal from re-opening on re-renders
+            navigate({ state: (old) => ({...old, prefillTask: undefined }), replace: true });
         }
-    }, [prefillData]);
+    // FIX: Replaced `routerState.location.key` with `routerState.location` to fix a TypeScript error where `key` was not found on the type. The `location` object itself is a stable dependency that changes on navigation.
+    }, [routerState.location]);
 
 
     const fetchTasks = useCallback(async () => {
