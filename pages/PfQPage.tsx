@@ -16,6 +16,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { cn } from '../lib/utils';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 
 // --- Co-located API Logic ---
@@ -212,6 +214,14 @@ const FosTacCalculator: React.FC = () => {
         enabled: !dataLoading,
     });
 
+    const displayHistory = useMemo(() => history.map(item => ({
+        ...item,
+        equipo_nombre: item.equipos?.nombre_equipo ?? 'N/A',
+    })), [history]);
+
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(displayHistory, { key: 'fecha_hora', direction: 'descending' });
+
+
     const { data: lastPhData } = useQuery({
         queryKey: ['lastPh', selectedEquipmentId],
         queryFn: () => fetchLastPhForEquipment(Number(selectedEquipmentId)),
@@ -221,7 +231,6 @@ const FosTacCalculator: React.FC = () => {
     useEffect(() => {
         if (lastPhData?.ph) {
             form.setValue('ph', lastPhData.ph);
-            // Briefly flash the input to indicate it was auto-filled
             setPhInputKey(Date.now());
         }
     }, [lastPhData, form]);
@@ -262,14 +271,14 @@ const FosTacCalculator: React.FC = () => {
         mutation.mutate(data);
     };
 
-    const dataToExport = useMemo(() => history.map(item => ({
+    const dataToExport = useMemo(() => sortedHistory.map(item => ({
         fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
-        equipo: item.equipos?.nombre_equipo || 'N/A',
+        equipo: item.equipo_nombre,
         ph: item.ph,
         fos_mg_l: item.fos_mg_l?.toFixed(2) ?? 'N/A',
         tac_mg_l: item.tac_mg_l?.toFixed(2) ?? 'N/A',
         relacion_fos_tac: item.relacion_fos_tac?.toFixed(3) ?? 'N/A',
-    })), [history]);
+    })), [sortedHistory]);
 
     if (dataError) {
         return (
@@ -284,7 +293,6 @@ const FosTacCalculator: React.FC = () => {
     }
     
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -366,31 +374,31 @@ const FosTacCalculator: React.FC = () => {
                 <CardContent className="pt-6">
                    <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-text-primary">Historial de Análisis Recientes</h2>
-                        <ExportButton data={dataToExport} filename="historial_fos_tac" disabled={history.length === 0} />
+                        <ExportButton data={dataToExport} filename="historial_fos_tac" disabled={sortedHistory.length === 0} />
                    </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (
                       <p className="text-center text-error">{(historyError as Error).message}</p>
-                   ) : history.length === 0 ? (
+                   ) : sortedHistory.length === 0 ? (
                       <p className="text-center text-text-secondary py-4">No hay análisis registrados todavía.</p>
                    ) : (
                       <div className="overflow-x-auto">
                           <table className="min-w-full divide-y divide-border">
                                <thead className="bg-background">
                                    <tr>
-                                       <th className={commonTableClasses.head}>Fecha y Hora</th>
-                                       <th className={commonTableClasses.head}>Equipo</th>
-                                       <th className={commonTableClasses.head}>FOS (mg/L)</th>
-                                       <th className={commonTableClasses.head}>TAC (mg/L)</th>
-                                       <th className={commonTableClasses.head}>Relación</th>
+                                       <SortableHeader columnKey="fecha_hora" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="equipo_nombre" title="Equipo" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="fos_mg_l" title="FOS (mg/L)" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="tac_mg_l" title="TAC (mg/L)" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="relacion_fos_tac" title="Relación" sortConfig={sortConfig} onSort={requestSort} />
                                    </tr>
                                </thead>
                                <tbody className="bg-surface divide-y divide-border">
-                                  {history.map(item => (
+                                  {sortedHistory.map(item => (
                                       <tr key={item.id}>
                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora).toLocaleString('es-AR')}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.equipos?.nombre_equipo || 'N/A'}</td>
+                                          <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.equipo_nombre}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary`}>{item.fos_mg_l?.toFixed(2) ?? 'N/A'}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary`}>{item.tac_mg_l?.toFixed(2) ?? 'N/A'}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary font-bold`}>{item.relacion_fos_tac?.toFixed(3) ?? 'N/A'}</td>
@@ -446,6 +454,14 @@ const Additives: React.FC = () => {
         },
         enabled: !dataLoading,
     });
+    
+    const displayHistory = useMemo(() => (history as EnrichedAditivoRecord[]).map(item => ({
+        ...item,
+        equipo_nombre: item.equipos?.nombre_equipo ?? 'N/A',
+    })), [history]);
+
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(displayHistory, { key: 'fecha_hora', direction: 'descending' });
+
 
     const mutation = useMutation({
         mutationFn: createAditivo,
@@ -463,15 +479,14 @@ const Additives: React.FC = () => {
         mutation.mutate(data);
     };
     
-    const dataToExport = useMemo(() => (history as EnrichedAditivoRecord[]).map(item => ({
+    const dataToExport = useMemo(() => sortedHistory.map(item => ({
         fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
         aditivo: item.tipo_aditivo,
         cantidad_kg: item.cantidad_kg,
-        equipo: item.equipos?.nombre_equipo,
-    })), [history]);
+        equipo: item.equipo_nombre,
+    })), [sortedHistory]);
 
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -529,32 +544,32 @@ const Additives: React.FC = () => {
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Aditivos Recientes</h3>
-                        <ExportButton data={dataToExport} filename="historial_aditivos" disabled={history.length === 0} />
+                        <ExportButton data={dataToExport} filename="historial_aditivos" disabled={sortedHistory.length === 0} />
                   </div>
                   {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                   ) : historyError ? (
                       <p className="text-center text-error">{(historyError as Error).message}</p>
-                  ) : history.length === 0 ? (
+                  ) : sortedHistory.length === 0 ? (
                       <p className="text-center text-text-secondary py-4">No hay registros de aditivos.</p>
                   ) : (
                       <div className="overflow-x-auto">
                           <table className="min-w-full divide-y divide-border">
                                <thead className="bg-background">
                                    <tr>
-                                       <th className={commonTableClasses.head}>Fecha y Hora</th>
-                                       <th className={commonTableClasses.head}>Aditivo</th>
-                                       <th className={commonTableClasses.head}>Cantidad (kg)</th>
-                                       <th className={commonTableClasses.head}>Equipo</th>
+                                       <SortableHeader columnKey="fecha_hora" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="tipo_aditivo" title="Aditivo" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="cantidad_kg" title="Cantidad (kg)" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="equipo_nombre" title="Equipo" sortConfig={sortConfig} onSort={requestSort} />
                                    </tr>
                                </thead>
                                <tbody className="bg-surface divide-y divide-border">
-                                  {(history as EnrichedAditivoRecord[]).map(item => (
+                                  {sortedHistory.map(item => (
                                       <tr key={item.id}>
                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora).toLocaleString('es-AR')}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.tipo_aditivo}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary`}>{item.cantidad_kg}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary`}>{item.equipos?.nombre_equipo}</td>
+                                          <td className={`${commonTableClasses.cell} text-text-primary`}>{item.equipo_nombre}</td>
                                       </tr>
                                   ))}
                                </tbody>

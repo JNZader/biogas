@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +20,8 @@ import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { PlantaId } from '../types/branded';
 import { cn } from '../lib/utils';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 type ChpChangeRecord = Database['public']['Tables']['cambios_potencia_chp']['Row'];
 
@@ -115,6 +117,8 @@ const ChpControlPage: React.FC = () => {
         queryFn: () => fetchChpHistory(activePlanta!.id as PlantaId),
         enabled: !!activePlanta,
     });
+    
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(history, { key: 'fecha_hora', direction: 'descending' });
 
     const mutation = useMutation({
         mutationFn: createChpChange,
@@ -163,7 +167,7 @@ const ChpControlPage: React.FC = () => {
         mutation.mutate(changeData);
     };
   
-    const dataToExport = history.map(item => ({
+    const dataToExport = sortedHistory.map(item => ({
         fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
         potencia_inicial_kw: item.potencia_inicial_kw,
         potencia_programada_kw: item.potencia_programada_kw,
@@ -172,7 +176,6 @@ const ChpControlPage: React.FC = () => {
     }));
 
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -226,32 +229,36 @@ const ChpControlPage: React.FC = () => {
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Cambios Recientes</h3>
-                        <ExportButton data={dataToExport} filename="historial_cambios_chp" disabled={history.length === 0} />
+                        <ExportButton data={dataToExport} filename="historial_cambios_chp" disabled={sortedHistory.length === 0} />
                     </div>
                     {historyLoading ? (
                         <p className="text-center text-text-secondary">Cargando historial...</p>
                     ) : historyError ? (
                         <p className="text-center text-red-500">Error al cargar el historial: {historyError.message}</p>
-                    ) : history.length === 0 ? (
+                    ) : sortedHistory.length === 0 ? (
                         <p className="text-center text-text-secondary py-4">No hay cambios de potencia registrados.</p>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-border">
                                 <thead className="bg-background">
                                     <tr>
-                                        <th className={commonTableClasses.head}>Fecha y Hora</th>
-                                        <th className={commonTableClasses.head}>Potencia (kW)</th>
-                                        <th className={commonTableClasses.head}>Motivo</th>
+                                        <SortableHeader columnKey="fecha_hora" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="potencia_inicial_kw" title="Potencia Inicial (kW)" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="potencia_programada_kw" title="Potencia Programada (kW)" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="motivo_cambio" title="Motivo" sortConfig={sortConfig} onSort={requestSort} />
                                     </tr>
                                 </thead>
                                 <tbody className="bg-surface divide-y divide-border">
-                                    {history.map(item => (
+                                    {sortedHistory.map(item => (
                                         <tr key={item.id}>
                                             <td className={`${commonTableClasses.cell} text-text-secondary`}>
                                                 {new Date(item.fecha_hora).toLocaleString('es-AR')}
                                             </td>
                                             <td className={`${commonTableClasses.cell} text-text-primary`}>
-                                                {item.potencia_inicial_kw} → {item.potencia_programada_kw}
+                                                {item.potencia_inicial_kw}
+                                            </td>
+                                             <td className={`${commonTableClasses.cell} text-text-primary`}>
+                                                {item.potencia_programada_kw}
                                             </td>
                                             <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>
                                                 {item.motivo_cambio}

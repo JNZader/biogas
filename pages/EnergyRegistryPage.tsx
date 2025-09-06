@@ -15,6 +15,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { cn } from '../lib/utils';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 type EnergiaRecord = Database['public']['Tables']['energia']['Row'];
 
@@ -113,6 +115,8 @@ const EnergyRegistryPage: React.FC = () => {
         queryFn: () => fetchEnergyHistory(activePlanta!.id),
         enabled: !!activePlanta,
     });
+    
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(history, { key: 'fecha', direction: 'descending' });
 
     const form = useForm<EnergyFormData>({
         resolver: zodResolver(energySchema),
@@ -168,7 +172,7 @@ const EnergyRegistryPage: React.FC = () => {
         mutation.mutate(insertData);
     }
     
-    const dataToExport = history.map(item => ({
+    const dataToExport = sortedHistory.map(item => ({
         fecha: new Date(item.fecha + 'T00:00:00').toLocaleDateString('es-AR'),
         generacion_electrica_total_kwh_dia: item.generacion_electrica_total_kwh_dia,
         flujo_biogas_kg_dia: item.flujo_biogas_kg_dia,
@@ -179,7 +183,6 @@ const EnergyRegistryPage: React.FC = () => {
     }));
 
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -297,27 +300,27 @@ const EnergyRegistryPage: React.FC = () => {
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Registros Recientes</h3>
-                        <ExportButton data={dataToExport} filename="historial_energia" disabled={history.length === 0} />
+                        <ExportButton data={dataToExport} filename="historial_energia" disabled={sortedHistory.length === 0} />
                   </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (
                       <p className="text-center text-red-500">{historyError.message}</p>
-                   ) : history.length === 0 ? (
+                   ) : sortedHistory.length === 0 ? (
                       <p className="text-center text-text-secondary py-4">No hay registros de energía todavía.</p>
                    ) : (
                       <div className="overflow-x-auto">
                           <table className="min-w-full divide-y divide-border">
                                <thead className="bg-background">
                                    <tr>
-                                       <th className={commonTableClasses.head}>Fecha</th>
-                                       <th className={commonTableClasses.head}>Gen. Eléctrica (kWh)</th>
-                                       <th className={`${commonTableClasses.head} hidden sm:table-cell`}>Biogás (kg)</th>
-                                       <th className={`${commonTableClasses.head} hidden md:table-cell`}>Horas Motor</th>
+                                       <SortableHeader columnKey="fecha" title="Fecha" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="generacion_electrica_total_kwh_dia" title="Gen. Eléctrica (kWh)" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="flujo_biogas_kg_dia" title="Biogás (kg)" sortConfig={sortConfig} onSort={requestSort} className="hidden sm:table-cell" />
+                                       <SortableHeader columnKey="horas_funcionamiento_motor_chp_dia" title="Horas Motor" sortConfig={sortConfig} onSort={requestSort} className="hidden md:table-cell" />
                                    </tr>
                                </thead>
                                <tbody className="bg-surface divide-y divide-border">
-                                  {history.map(item => (
+                                  {sortedHistory.map(item => (
                                       <tr key={item.id}>
                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>
                                              {new Date(item.fecha + 'T00:00:00').toLocaleDateString('es-AR', { year: '2-digit', month: '2-digit', day: '2-digit' })}

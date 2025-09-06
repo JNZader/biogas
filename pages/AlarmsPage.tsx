@@ -17,16 +17,14 @@ import type { Database } from '../types/database';
 import { cn, exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { useToast } from '../hooks/use-toast';
 import { customAlertsStore } from '../stores/customAlertsStore';
-// FIX: Imported Form components to resolve multiple 'Cannot find name' errors.
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
-// FIX: Import 'Label' component to resolve 'Cannot find name 'Label'' error.
 import { Label } from '../components/ui/Label';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
+
 
 import { 
     BellAlertIcon, 
-    ArrowUpIcon, 
-    ArrowDownIcon, 
-    ChevronUpDownIcon, 
     TrashIcon,
     ArrowDownTrayIcon,
     WrenchScrewdriverIcon,
@@ -51,9 +49,6 @@ interface AlarmDisplayItem {
     isCustom: boolean;
     equipoId?: number | null;
 }
-
-type SortKey = 'timestamp' | 'alarmType' | 'severity';
-type SortDirection = 'ascending' | 'descending';
 
 // --- Co-located Zod Schema ---
 const alertRuleSchema = z.object({
@@ -136,24 +131,6 @@ const Badge: React.FC<{ children: React.ReactNode; className?: string }> = ({ ch
     </span>
 );
 
-const SortableHeader: React.FC<{ 
-    columnKey: SortKey; 
-    title: string; 
-    sortConfig: { key: SortKey; direction: SortDirection };
-    onSort: (key: SortKey) => void;
-}> = ({ columnKey, title, sortConfig, onSort }) => {
-    const isSorted = sortConfig.key === columnKey;
-    const Icon = isSorted ? (sortConfig.direction === 'ascending' ? ArrowUpIcon : ArrowDownIcon) : ChevronUpDownIcon;
-
-    return (
-        <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">
-            <button className="flex items-center gap-1 hover:text-text-primary transition-colors" onClick={() => onSort(columnKey)}>
-                {title}
-                <Icon className="h-4 w-4" />
-            </button>
-        </th>
-    );
-};
 
 // --- Feature: Custom Alerts Configuration ---
 const CustomAlertsConfig: React.FC = () => {
@@ -183,7 +160,6 @@ const CustomAlertsConfig: React.FC = () => {
         <Card>
             <CardHeader><CardTitle>Configurar Alertas Personalizadas</CardTitle></CardHeader>
             <CardContent className="space-y-6">
-                {/* FIX: Replaced raw form with Form component and refactored fields for consistency. */}
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
@@ -280,9 +256,8 @@ const AlarmsPage: React.FC = () => {
 
     const [severityFilter, setSeverityFilter] = useState<string>('all');
     const [statusFilter, setStatusFilter] = useState<string>('all');
-    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'timestamp', direction: 'descending' });
-
-    // 1. Combine and normalize system and custom alerts
+    
+    // Combine and normalize system and custom alerts
     const allAlarms = useMemo((): AlarmDisplayItem[] => {
         const normalizedSystemAlarms: AlarmDisplayItem[] = (systemAlarms || []).map(alarm => ({
             id: alarm.id,
@@ -308,8 +283,8 @@ const AlarmsPage: React.FC = () => {
         return [...normalizedCustomAlerts, ...normalizedSystemAlarms];
     }, [systemAlarms, triggeredAlerts]);
 
-    // 2. Filter and sort the normalized list
-    const processedAlarms = useMemo(() => {
+    // Filter the normalized list
+    const filteredAlarms = useMemo(() => {
         let filtered = allAlarms;
 
         if (severityFilter !== 'all') {
@@ -318,38 +293,17 @@ const AlarmsPage: React.FC = () => {
         if (statusFilter !== 'all') {
             filtered = filtered.filter(a => (statusFilter === 'resolved' ? a.isResolved : !a.isResolved));
         }
-
-        const severityOrder: Record<Severity, number> = { 'critical': 3, 'warning': 2, 'info': 1 };
         
-        return [...filtered].sort((a, b) => {
-            const valA = a[sortConfig.key];
-            const valB = b[sortConfig.key];
-            
-            let comparison = 0;
-            if(sortConfig.key === 'severity') {
-                comparison = (severityOrder[valA as Severity] || 0) - (severityOrder[valB as Severity] || 0);
-            } else {
-                 if (valA === null || valA === undefined) return 1;
-                 if (valB === null || valB === undefined) return -1;
-                 if (valA < valB) comparison = -1;
-                 if (valA > valB) comparison = 1;
-            }
-
-            return sortConfig.direction === 'ascending' ? comparison : -comparison;
-        });
-    }, [allAlarms, severityFilter, statusFilter, sortConfig]);
-
-    const handleSort = (key: SortKey) => {
-        setSortConfig(prev => ({
-            key,
-            direction: prev.key === key && prev.direction === 'descending' ? 'ascending' : 'descending'
-        }));
-    };
+        return filtered;
+    }, [allAlarms, severityFilter, statusFilter]);
     
+    // Sort the filtered list
+    const { items: sortedAlarms, requestSort, sortConfig } = useSortableData<AlarmDisplayItem>(filteredAlarms, { key: 'timestamp', direction: 'descending' });
+
+
     const handleCreateTask = (alarm: AlarmDisplayItem) => {
         navigate({
             to: '/maintenance',
-            // FIX: Cast the state object to `any` to bypass strict type checking for router state.
             state: {
                 prefillTask: {
                     equipo_id: alarm.equipoId,
@@ -365,14 +319,14 @@ const AlarmsPage: React.FC = () => {
         'info': 'bg-background text-text-secondary',
     }[severity]);
 
-    const dataToExport = useMemo(() => processedAlarms.map(alarm => ({
+    const dataToExport = useMemo(() => sortedAlarms.map(alarm => ({
         fecha_hora: new Date(alarm.timestamp).toLocaleString('es-AR'),
         tipo_alarma: alarm.alarmType,
         descripcion: alarm.description,
         severidad: alarm.severity,
         estado: alarm.isResolved ? 'Resuelta' : 'Pendiente',
         origen: alarm.isCustom ? 'Personalizada' : 'Sistema',
-    })), [processedAlarms]);
+    })), [sortedAlarms]);
 
 
     if (error) {
@@ -386,7 +340,7 @@ const AlarmsPage: React.FC = () => {
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>Historial de Alarmas</CardTitle>
-                    <ExportButton data={dataToExport} filename="historial_alarmas" disabled={processedAlarms.length === 0} />
+                    <ExportButton data={dataToExport} filename="historial_alarmas" disabled={sortedAlarms.length === 0} />
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -411,7 +365,7 @@ const AlarmsPage: React.FC = () => {
 
                     {isLoading ? (
                         <p className="text-center text-text-secondary py-10">Cargando historial...</p>
-                    ) : processedAlarms.length === 0 ? (
+                    ) : sortedAlarms.length === 0 ? (
                         <EmptyState
                             icon={<BellAlertIcon className="mx-auto h-12 w-12" />}
                             title="Sin Alarmas"
@@ -422,15 +376,15 @@ const AlarmsPage: React.FC = () => {
                             <table className="min-w-full divide-y divide-border">
                                 <thead className="bg-background">
                                     <tr>
-                                        <SortableHeader columnKey="timestamp" title="Fecha y Hora" sortConfig={sortConfig} onSort={handleSort}/>
-                                        <SortableHeader columnKey="alarmType" title="Tipo de Alarma" sortConfig={sortConfig} onSort={handleSort}/>
-                                        <SortableHeader columnKey="severity" title="Severidad" sortConfig={sortConfig} onSort={handleSort}/>
+                                        <SortableHeader columnKey="timestamp" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort}/>
+                                        <SortableHeader columnKey="alarmType" title="Tipo de Alarma" sortConfig={sortConfig} onSort={requestSort}/>
+                                        <SortableHeader columnKey="severity" title="Severidad" sortConfig={sortConfig} onSort={requestSort}/>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Estado</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-surface divide-y divide-border">
-                                    {processedAlarms.map(alarm => (
+                                    {sortedAlarms.map(alarm => (
                                         <tr key={alarm.id}>
                                             <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">
                                                 {new Date(alarm.timestamp).toLocaleString('es-AR')}

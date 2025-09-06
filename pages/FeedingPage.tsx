@@ -20,6 +20,8 @@ import { PlusCircleIcon, ArrowDownTrayIcon, ChevronDownIcon, ChatBubbleLeftEllip
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { cn } from '../lib/utils';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 
 // --- Co-located Secure Markdown Renderer ---
@@ -85,10 +87,8 @@ const analysisSchema = z.object({
 const logFeedingSchema = z.object({
     source: z.string().min(1, "Este campo es requerido."),
     destination: z.string().min(1, "Este campo es requerido."),
-    // FIX: Replaced `z.coerce.number()` with `z.number()` to resolve a type mismatch with `react-hook-form`'s `zodResolver`.
-    // The `coerce` helper creates a schema with a different input type (`unknown`) than its output type (`number`), causing type inference issues.
-    // The form's `onChange` handler already correctly provides a numeric value.
-    quantity: z.number({invalid_type_error: "La cantidad debe ser un número."}).positive({ message: "La cantidad debe ser mayor a cero." }),
+    // FIX: The `invalid_type_error` property is not valid for `z.coerce.number()`, which was causing Zod to incorrectly infer the output type as `unknown` instead of `number`. This led to a cascade of type errors in `react-hook-form`. Removing the invalid property allows Zod to infer the correct type, resolving all related errors.
+    quantity: z.coerce.number().positive({ message: "La cantidad debe ser mayor a cero." }),
     unit: z.enum(['kg', 'm³']),
     observations: z.string().optional(),
 });
@@ -277,6 +277,15 @@ const LogFeeding: React.FC = () => {
     const { equipos, loading: isEquiposLoading, error: equiposError, refreshData } = useSupabaseData();
     const { data: history = [], isLoading: isHistoryLoading } = useQuery({ queryKey: ['alimentacionHistory'], queryFn: fetchAlimentacionHistory });
 
+    const displayHistory = useMemo(() => history.map(item => ({
+        ...item,
+        origen_nombre: (item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A',
+        destino_nombre: (item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A',
+        operador_nombre: (item as EnrichedAlimentacionRecord).usuario_operador?.nombres ?? 'N/A',
+    })), [history]);
+
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(displayHistory, { key: 'fecha_hora', direction: 'descending' });
+
     const form = useForm<z.infer<typeof logFeedingSchema>>({
         resolver: zodResolver(logFeedingSchema),
         defaultValues: {
@@ -316,18 +325,17 @@ const LogFeeding: React.FC = () => {
         mutation.mutate(data);
     }
 
-    const dataToExport = useMemo(() => history.map(item => ({
+    const dataToExport = useMemo(() => sortedHistory.map(item => ({
         fecha_hora: new Date(item.fecha_hora!).toLocaleString('es-AR'),
-        origen: (item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A',
-        destino: (item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A',
+        origen: item.origen_nombre,
+        destino: item.destino_nombre,
         cantidad: item.cantidad,
         unidad: item.unidad,
-        operador: (item as EnrichedAlimentacionRecord).usuario_operador?.nombres ?? 'N/A',
+        operador: item.operador_nombre,
         observaciones: item.observaciones,
-    })), [history]);
+    })), [sortedHistory]);
 
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -441,31 +449,31 @@ const LogFeeding: React.FC = () => {
                 <CardContent className="pt-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold text-text-primary">Historial de Alimentación Reciente</h3>
-                        <ExportButton data={dataToExport} filename="historial_alimentacion" disabled={history.length === 0} />
+                        <ExportButton data={dataToExport} filename="historial_alimentacion" disabled={sortedHistory.length === 0} />
                     </div>
                     {isHistoryLoading ? <p className="text-center text-text-secondary">Cargando historial...</p> : (
                          <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-border">
                                  <thead className="bg-background">
                                      <tr>
-                                         <th className={commonTableClasses.head}>Fecha</th>
-                                         <th className={commonTableClasses.head}>Origen</th>
-                                         <th className={commonTableClasses.head}>Destino</th>
-                                         <th className={`${commonTableClasses.head} text-right`}>Cantidad</th>
-                                         <th className={commonTableClasses.head}>Operador</th>
-                                         <th className={commonTableClasses.head}>Obs.</th>
+                                         <SortableHeader columnKey="fecha_hora" title="Fecha" sortConfig={sortConfig} onSort={requestSort} />
+                                         <SortableHeader columnKey="origen_nombre" title="Origen" sortConfig={sortConfig} onSort={requestSort} />
+                                         <SortableHeader columnKey="destino_nombre" title="Destino" sortConfig={sortConfig} onSort={requestSort} />
+                                         <SortableHeader columnKey="cantidad" title="Cantidad" sortConfig={sortConfig} onSort={requestSort} className="text-right" />
+                                         <SortableHeader columnKey="operador_nombre" title="Operador" sortConfig={sortConfig} onSort={requestSort} />
+                                         <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Obs.</th>
                                      </tr>
                                  </thead>
                                  <tbody className="bg-surface divide-y divide-border">
-                                    {history.length === 0 ? (
+                                    {sortedHistory.length === 0 ? (
                                         <tr><td colSpan={6} className="text-center py-4 text-text-secondary">No hay registros de alimentación.</td></tr>
-                                    ) : history.map(item => (
+                                    ) : sortedHistory.map(item => (
                                         <tr key={item.id}>
                                             <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora!).toLocaleString('es-AR')}</td>
-                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A'}</td>
-                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A'}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{item.origen_nombre}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{item.destino_nombre}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary font-medium text-right`}>{item.cantidad} {item.unidad}</td>
-                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{(item as EnrichedAlimentacionRecord).usuario_operador?.nombres ?? 'N/A'}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{item.operador_nombre}</td>
                                             <td className={`${commonTableClasses.cell} text-center`}>
                                                 {item.observaciones && (
                                                     <div title={item.observaciones}>

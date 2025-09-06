@@ -22,6 +22,8 @@ import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
 import { cn } from '../lib/utils';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 
 type ChecklistItem = Database['public']['Tables']['checklist_items']['Row'];
@@ -294,8 +296,6 @@ const Tasks: React.FC = () => {
         },
     });
 
-    // FIX: The `select` option in `useRouterState` can have unstable type inference.
-    // Accessing the state directly from the hook's return value is more robust.
     const routerState = useRouterState();
     const prefillData = (routerState.location.state as { prefillTask?: any } | undefined)?.prefillTask;
 
@@ -352,6 +352,14 @@ const Tasks: React.FC = () => {
             setHistoryLoading(false);
         }
     }, []);
+    
+    const displayHistory = useMemo(() => history.map(item => ({
+        ...item,
+        equipo_nombre: item.equipos?.nombre_equipo ?? 'N/A',
+        tipo_mantenimiento_nombre: item.tipos_mantenimiento?.nombre_tipo ?? 'N/A',
+    })), [history]);
+    
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(displayHistory, { key: 'fecha_fin', direction: 'descending' });
 
     useEffect(() => {
         fetchTasks();
@@ -432,16 +440,15 @@ const Tasks: React.FC = () => {
         setQuickAddState({ isOpen: true, ...config });
     };
 
-    const dataToExport = useMemo(() => history.map(item => ({
+    const dataToExport = useMemo(() => sortedHistory.map(item => ({
         fecha_fin: item.fecha_fin ? new Date(item.fecha_fin).toLocaleDateString('es-AR') : 'N/A',
-        equipo: item.equipos?.nombre_equipo,
-        tipo_mantenimiento: item.tipos_mantenimiento?.nombre_tipo,
+        equipo: item.equipo_nombre,
+        tipo_mantenimiento: item.tipo_mantenimiento_nombre,
         descripcion_problema: item.descripcion_problema,
         trabajo_realizado: item.descripcion_trabajo_realizado,
-    })), [history]);
+    })), [sortedHistory]);
 
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -507,33 +514,33 @@ const Tasks: React.FC = () => {
                 <CardContent className="pt-6">
                    <div className="flex justify-between items-center mb-4">
                         <h2 className="text-lg font-semibold text-text-primary">Historial de Tareas Completadas</h2>
-                        <ExportButton data={dataToExport} filename="historial_mantenimiento" disabled={history.length === 0} />
+                        <ExportButton data={dataToExport} filename="historial_mantenimiento" disabled={sortedHistory.length === 0} />
                    </div>
                    {historyLoading ? (
                       <p className="text-center text-text-secondary">Cargando historial...</p>
                    ) : historyError ? (
                       <p className="text-center text-error">{historyError}</p>
-                   ) : history.length === 0 ? (
+                   ) : sortedHistory.length === 0 ? (
                       <p className="text-center text-text-secondary py-4">No hay tareas completadas recientemente.</p>
                    ) : (
                       <div className="overflow-x-auto">
                           <table className="min-w-full divide-y divide-border">
                                <thead className="bg-background">
                                    <tr>
-                                       <th className={commonTableClasses.head}>Fecha Fin</th>
-                                       <th className={commonTableClasses.head}>Equipo</th>
-                                       <th className={`${commonTableClasses.head} hidden sm:table-cell`}>Tipo</th>
-                                       <th className={`${commonTableClasses.head} hidden md:table-cell`}>Tarea</th>
+                                       <SortableHeader columnKey="fecha_fin" title="Fecha Fin" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="equipo_nombre" title="Equipo" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="tipo_mantenimiento_nombre" title="Tipo" sortConfig={sortConfig} onSort={requestSort} className="hidden sm:table-cell" />
+                                       <SortableHeader columnKey="descripcion_problema" title="Tarea" sortConfig={sortConfig} onSort={requestSort} className="hidden md:table-cell" />
                                    </tr>
                                </thead>
                                <tbody className="bg-surface divide-y divide-border">
-                                  {history.map(item => (
+                                  {sortedHistory.map(item => (
                                       <tr key={item.id}>
                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>
                                             {item.fecha_fin ? new Date(item.fecha_fin).toLocaleDateString('es-AR') : 'N/A'}
                                           </td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.equipos?.nombre_equipo}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary hidden sm:table-cell`}>{item.tipos_mantenimiento?.nombre_tipo}</td>
+                                          <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.equipo_nombre}</td>
+                                          <td className={`${commonTableClasses.cell} text-text-primary hidden sm:table-cell`}>{item.tipo_mantenimiento_nombre}</td>
                                           <td className={`${commonTableClasses.cell} text-text-primary hidden md:table-cell`}>
                                             <span className="truncate">{item.descripcion_problema}</span>
                                           </td>

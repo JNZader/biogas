@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Input } from './Input';
 import { Button } from './Button';
 import { PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../EmptyState';
 import { ArchiveBoxIcon } from '@heroicons/react/24/solid';
+import { useSortableData } from '../../hooks/useSortableData';
+import { SortableHeader } from './SortableHeader';
 
 export interface ColumnDef<T> {
     header: string;
@@ -22,18 +23,19 @@ export function DataTable<T extends { id: any }>({ columns, data, onEdit, onDele
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
+    const initialSortKey = columns.length > 0 ? columns[0].accessorKey : null;
+    const { items: sortedData, requestSort, sortConfig } = useSortableData(data, { key: initialSortKey, direction: 'ascending' });
+
     useEffect(() => {
         setCurrentPage(1);
     }, [data]);
 
     const paginatedData = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
-        return data.slice(startIndex, startIndex + itemsPerPage);
-    }, [data, currentPage, itemsPerPage]);
+        return sortedData.slice(startIndex, startIndex + itemsPerPage);
+    }, [sortedData, currentPage, itemsPerPage]);
 
     const totalPages = Math.ceil(data.length / itemsPerPage);
-
-    const commonClasses = "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider";
 
     return (
         <div className="space-y-4">
@@ -41,7 +43,15 @@ export function DataTable<T extends { id: any }>({ columns, data, onEdit, onDele
                  <table className="min-w-full divide-y divide-border">
                     <thead className="bg-background">
                         <tr>
-                            {columns.map(col => <th key={String(col.accessorKey)} className={commonClasses}>{col.header}</th>)}
+                            {columns.map(col => (
+                                <SortableHeader
+                                    key={String(col.accessorKey)}
+                                    columnKey={col.accessorKey}
+                                    title={col.header}
+                                    sortConfig={sortConfig}
+                                    onSort={requestSort}
+                                />
+                            ))}
                             <th className="relative px-4 py-3"><span className="sr-only">Acciones</span></th>
                         </tr>
                     </thead>

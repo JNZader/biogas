@@ -14,6 +14,8 @@ import { useToast } from '../hooks/use-toast';
 import EmptyState from '../components/EmptyState';
 import { cn } from '../lib/utils';
 import ProtectedRoute from '../components/ProtectedRoute.tsx';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 // --- Static list of all available application views for the permission matrix ---
 const ALL_APP_VIEWS = [
@@ -97,6 +99,8 @@ const UserManagementPage: React.FC = () => {
     useEffect(() => {
         fetchUsers();
     }, [fetchUsers]);
+    
+    const { items: sortedUsers, requestSort, sortConfig } = useSortableData(users, { key: 'nombres', direction: 'ascending' });
 
     const handleOpenModal = async (mode: 'invite' | 'edit', user: any | null = null) => {
         setModalMode(mode);
@@ -158,7 +162,6 @@ const UserManagementPage: React.FC = () => {
     }
     
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -175,7 +178,7 @@ const UserManagementPage: React.FC = () => {
                     </CardHeader>
                     <CardContent>
                         {error && <p className="text-center text-error mb-4">{error}</p>}
-                        {!users || users.length === 0 ? (
+                        {!sortedUsers || sortedUsers.length === 0 ? (
                             <EmptyState
                                 icon={<UsersIcon className="mx-auto h-12 w-12" />}
                                 title="No hay usuarios"
@@ -186,14 +189,14 @@ const UserManagementPage: React.FC = () => {
                                 <table className="min-w-full divide-y divide-border">
                                     <thead className="bg-background">
                                         <tr>
-                                            <th className={commonTableClasses.head}>Nombre</th>
-                                            <th className={commonTableClasses.head}>Rol</th>
-                                            <th className={cn(commonTableClasses.head, "hidden sm:table-cell")}>Correo</th>
+                                            <SortableHeader columnKey="nombres" title="Nombre" sortConfig={sortConfig} onSort={requestSort} />
+                                            <SortableHeader columnKey="rol" title="Rol" sortConfig={sortConfig} onSort={requestSort} />
+                                            <SortableHeader columnKey="correo" title="Correo" sortConfig={sortConfig} onSort={requestSort} className="hidden sm:table-cell" />
                                             <th className="relative px-6 py-3"><span className="sr-only">Acciones</span></th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-surface divide-y divide-border">
-                                        {users.map(user => (
+                                        {sortedUsers.map(user => (
                                             <tr key={user.id}>
                                                 <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{user.nombres}</td>
                                                 <td className={`${commonTableClasses.cell} text-text-secondary`}>{user.rol}</td>

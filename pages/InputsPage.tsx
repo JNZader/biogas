@@ -15,6 +15,8 @@ import { Select } from '../components/ui/Select';
 import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import type { Database } from '../types/database';
+import { useSortableData } from '../hooks/useSortableData';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 
 // --- Co-located Zod Schema ---
@@ -24,10 +26,8 @@ const ingresoSchema = z.object({
   remito: z.string().min(1, "Requerido"),
   provider: z.string().min(1, "Requerido"),
   substrate: z.string().min(1, "Requerido"),
-  // FIX: Replaced `z.coerce.number()` with `z.number()` to resolve a type mismatch with `react-hook-form`'s `zodResolver`.
-  // The `coerce` helper creates a schema with a different input type (`unknown`) than its output type (`number`), causing type inference issues.
-  // The form's `onChange` handler already correctly provides a numeric value.
-  quantity: z.number({invalid_type_error: "La cantidad debe ser un número."}).positive({ message: "La cantidad debe ser mayor a cero." }),
+  // FIX: The `invalid_type_error` property is not valid for `z.coerce.number()`, which was causing Zod to incorrectly infer the output type as `unknown` instead of `number`. This led to a cascade of type errors in `react-hook-form`. Removing the invalid property allows Zod to infer the correct type, resolving all related errors.
+  quantity: z.coerce.number().positive({ message: "La cantidad debe ser mayor a cero." }),
   location: z.string().min(1, "Requerido"),
 });
 type IngresoFormData = z.infer<typeof ingresoSchema>;
@@ -69,7 +69,7 @@ const fetchIngresosHistory = async (): Promise<IngresoHistory[]> => {
         .from('ingresos_viaje_camion')
         .select(`
             *,
-            usuarios:usuarios!ingresos_viaje_camion_usuario_operador_id_fkey( nombres ),
+            usuarios!ingresos_viaje_camion_usuario_operador_id_fkey( nombres ),
             camiones ( patente ),
             detalle_ingreso_sustrato (
                 *,
@@ -80,7 +80,6 @@ const fetchIngresosHistory = async (): Promise<IngresoHistory[]> => {
         .order('fecha_hora_ingreso', { ascending: false })
         .limit(10);
     if (error) throw error;
-    // FIX: Added an explicit hint (`!ingresos_viaje_camion_usuario_operador_id_fkey`) to the `usuarios` join to resolve ambiguity, as there are multiple foreign keys to the `usuarios` table. Also cast the result to `any` to bypass a complex TypeScript error, which is safe now that the query shape is correct.
     return data as any as IngresoHistory[];
 };
 
@@ -219,7 +218,7 @@ const InputsPage: React.FC = () => {
         return history.flatMap(trip => 
             trip.detalle_ingreso_sustrato.map(detail => ({
                 id: `${trip.id}-${detail.id}`,
-                fecha_hora: new Date(trip.fecha_hora_ingreso).toLocaleString('es-AR'),
+                fecha_hora: trip.fecha_hora_ingreso,
                 remito: trip.numero_remito_general,
                 patente: trip.camiones?.patente,
                 proveedor: detail.empresa?.nombre,
@@ -229,6 +228,8 @@ const InputsPage: React.FC = () => {
             }))
         );
     }, [history]);
+    
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(flattenedHistory, { key: 'fecha_hora', direction: 'descending' });
 
     if (error) {
         return (
@@ -245,7 +246,6 @@ const InputsPage: React.FC = () => {
     }
     
     const commonTableClasses = {
-        head: "px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider",
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
@@ -396,19 +396,19 @@ const InputsPage: React.FC = () => {
                             <table className="min-w-full divide-y divide-border">
                                  <thead className="bg-background">
                                      <tr>
-                                         <th className={commonTableClasses.head}>Fecha</th>
-                                         <th className={commonTableClasses.head}>Sustrato</th>
-                                         <th className={`${commonTableClasses.head} text-right`}>Cantidad (kg)</th>
-                                         <th className={`${commonTableClasses.head} hidden sm:table-cell`}>Proveedor</th>
-                                         <th className={`${commonTableClasses.head} hidden md:table-cell`}>Operador</th>
+                                         <SortableHeader columnKey="fecha_hora" title="Fecha" sortConfig={sortConfig} onSort={requestSort} />
+                                         <SortableHeader columnKey="sustrato" title="Sustrato" sortConfig={sortConfig} onSort={requestSort} />
+                                         <SortableHeader columnKey="cantidad" title="Cantidad (kg)" sortConfig={sortConfig} onSort={requestSort} className="text-right" />
+                                         <SortableHeader columnKey="proveedor" title="Proveedor" sortConfig={sortConfig} onSort={requestSort} className="hidden sm:table-cell" />
+                                         <SortableHeader columnKey="usuario" title="Operador" sortConfig={sortConfig} onSort={requestSort} className="hidden md:table-cell" />
                                      </tr>
                                  </thead>
                                  <tbody className="bg-surface divide-y divide-border">
-                                    {flattenedHistory.length === 0 ? (
+                                    {sortedHistory.length === 0 ? (
                                         <tr><td colSpan={5} className="text-center py-4 text-text-secondary">No hay registros de ingresos.</td></tr>
-                                    ) : flattenedHistory.map(item => (
+                                    ) : sortedHistory.map(item => (
                                         <tr key={item.id}>
-                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{item.fecha_hora}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora).toLocaleString('es-AR')}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.sustrato}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary text-right`}>{item.cantidad?.toLocaleString('es-AR')}</td>
                                             <td className={`${commonTableClasses.cell} text-text-secondary hidden sm:table-cell`}>{item.proveedor}</td>
