@@ -84,11 +84,11 @@ const analysisSchema = z.object({
   volatileSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
 });
 
-// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
+// FIX: Refactored Zod schema to use valid syntax for number coercion, resolving multiple TypeScript errors.
 const logFeedingSchema = z.object({
     source: z.string().min(1, "Debe seleccionar una fuente."),
     destination: z.string().min(1, "Debe seleccionar un destino."),
-    quantity: z.coerce.number({invalid_type_error: "Debe ingresar un número."}).positive("La cantidad debe ser mayor a cero."),
+    quantity: z.coerce.number().positive("La cantidad debe ser mayor a cero."),
     unit: z.enum(['kg', 'm³']),
     observations: z.string().optional(),
 });

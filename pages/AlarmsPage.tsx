@@ -55,7 +55,7 @@ interface AlarmDisplayItem {
 const alertRuleSchema = z.object({
   parameter: z.enum(['fosTac', 'ch4']),
   condition: z.enum(['gt', 'lt', 'eq']),
-  value: z.coerce.number({invalid_type_error: "Debe ser un número." }).positive("El valor debe ser positivo."),
+  value: z.coerce.number().positive("El valor debe ser positivo."),
   severity: z.enum(['info', 'warning', 'critical']),
 });
 type AlertRuleFormData = z.infer<typeof alertRuleSchema>;
@@ -303,14 +303,16 @@ const AlarmsPage: React.FC = () => {
     }, []);
 
     const handleCreateTask = (alarm: AlarmDisplayItem) => {
+        // FIX: Used an updater function for the 'state' property to comply with TanStack Router's type definitions and resolve the 'prefillTask' property error.
         navigate({
             to: '/maintenance',
-            state: {
+            state: (old) => ({
+                ...old,
                 prefillTask: {
                     descripcion_problema: `Basado en la alarma: ${alarm.alarmType} - ${alarm.description}`,
                     equipo_id: alarm.equipoId
                 }
-            }
+            })
         });
     };
     
@@ -361,7 +363,8 @@ const AlarmsPage: React.FC = () => {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    {error && <p className="text-center text-error mb-4">{error}</p>}
+                    {/* FIX: Use error.message to display the error string instead of passing the Error object directly as a ReactNode. */}
+                    {error && <p className="text-center text-error mb-4">{error.message}</p>}
                     {sortedAlarms.length === 0 ? (
                         <EmptyState
                             icon={<BellAlertIcon className="mx-auto h-12 w-12" />}

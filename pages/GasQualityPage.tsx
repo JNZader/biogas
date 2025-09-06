@@ -24,26 +24,26 @@ import { SortableHeader } from '../components/ui/SortableHeader';
 
 // --- Co-located Schemas and Types ---
 
-// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
+// FIX: Refactored Zod schema to use valid syntax for number coercion, resolving multiple TypeScript errors.
 const gasCompositionSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
-    co2: z.coerce.number({invalid_type_error: "Debe ingresar un número válido."}).nonnegative("El valor no puede ser negativo."),
-    ch4: z.coerce.number({invalid_type_error: "Debe ingresar un número válido."}).nonnegative("El valor no puede ser negativo."),
-    o2: z.coerce.number({invalid_type_error: "Debe ingresar un número válido."}).nonnegative("El valor no puede ser negativo."),
-    h2s: z.coerce.number({invalid_type_error: "Debe ingresar un número válido."}).nonnegative("El valor no puede ser negativo."),
+    co2: z.coerce.number().nonnegative("El valor no puede ser negativo."),
+    ch4: z.coerce.number().nonnegative("El valor no puede ser negativo."),
+    o2: z.coerce.number().nonnegative("El valor no puede ser negativo."),
+    h2s: z.coerce.number().nonnegative("El valor no puede ser negativo."),
 });
 type GasCompositionFormData = z.infer<typeof gasCompositionSchema>;
 
-// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
+// FIX: Refactored Zod schema to use valid syntax for number coercion, resolving multiple TypeScript errors.
 const additionalMeasurementsSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
-    flow_scada: z.coerce.number({ invalid_type_error: "Debe ingresar un número válido." }).nonnegative("El valor no puede ser negativo.").optional(),
-    flow_chp: z.coerce.number({invalid_type_error: "Debe ingresar un número válido."}).nonnegative("El valor no puede ser negativo."),
-    power: z.coerce.number({invalid_type_error: "Debe ingresar un número válido."}).nonnegative("El valor no puede ser negativo."),
+    flow_scada: z.coerce.number().nonnegative("El valor no puede ser negativo.").optional(),
+    flow_chp: z.coerce.number().nonnegative("El valor no puede ser negativo."),
+    power: z.coerce.number().nonnegative("El valor no puede ser negativo."),
 });
 type AdditionalMeasurementsFormData = z.infer<typeof additionalMeasurementsSchema>;
 

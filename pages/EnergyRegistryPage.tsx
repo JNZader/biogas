@@ -25,14 +25,14 @@ const PLAN_COMPROMISO_MWH_DIA = 28.8;
 // FIX: Refactored Zod schema to use valid syntax for number coercion and validation messages, resolving multiple TypeScript errors.
 const energySchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
-  total_gen: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  spot_dispatch: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  total_dispatch_smec: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  smec_total: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  chp_total: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  motor_hours: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo.").max(24, "No puede exceder 24 horas."),
-  torch_time: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo.").optional(),
-  biogas_flow: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
+  total_gen: z.coerce.number().nonnegative("Debe ser un número no negativo."),
+  spot_dispatch: z.coerce.number().nonnegative("Debe ser un número no negativo."),
+  total_dispatch_smec: z.coerce.number().nonnegative("Debe ser un número no negativo."),
+  smec_total: z.coerce.number().nonnegative("Debe ser un número no negativo."),
+  chp_total: z.coerce.number().nonnegative("Debe ser un número no negativo."),
+  motor_hours: z.coerce.number().nonnegative("Debe ser un número no negativo.").max(24, "No puede exceder 24 horas."),
+  torch_time: z.coerce.number().nonnegative("Debe ser un número no negativo.").optional(),
+  biogas_flow: z.coerce.number().nonnegative("Debe ser un número no negativo."),
 }).refine(data => !data.total_dispatch_smec || data.total_dispatch_smec >= (data.spot_dispatch || 0), {
     message: "El despacho total no puede ser menor que el despacho SPOT.",
     path: ["total_dispatch_smec"],

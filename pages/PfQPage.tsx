@@ -162,25 +162,31 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 );
 
 // --- Zod Schemas ---
-// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
+// FIX: Removed invalid 'required_error' and 'invalid_type_error' properties from z.coerce.number calls to fix schema validation errors.
 const fosTacSchema = z.object({
-  equipment: z.string().min(1, "Debe seleccionar un equipo."),
-  date: z.string().min(1, "La fecha es requerida."),
-  ph: z.coerce.number({invalid_type_error: "Debe ser un número."}).min(0, "El pH debe ser mayor o igual a 0.").max(14, "El pH no puede ser mayor a 14.").optional(),
-  vol1: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El volumen no puede ser negativo."),
-  vol2: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El volumen no puede ser negativo."),
-}).refine(data => data.vol2 >= data.vol1, {
+  equipment: z.string().min(1, "Requerido."),
+  date: z.string().min(1, "Requerido."),
+  ph: z.coerce.number().min(0, "El pH debe ser >= 0.").max(14, "El pH no puede ser > 14."),
+  vol1: z.coerce.number().nonnegative("El volumen no puede ser negativo."),
+  vol2: z.coerce.number().nonnegative("El volumen no puede ser negativo."),
+}).refine(data => {
+    if (typeof data.vol1 === 'number' && typeof data.vol2 === 'number') {
+        return data.vol2 >= data.vol1;
+    }
+    return true;
+}, {
   message: 'El Volumen 2 no puede ser menor que el Volumen 1.',
   path: ['vol2'],
 });
 type FosTacFormData = z.infer<typeof fosTacSchema>;
 
-// FIX: Refactored Zod schema to use valid syntax for enums, required fields, and number coercion, resolving multiple TypeScript errors.
+// FIX: Removed invalid 'errorMap' property from z.enum to resolve schema validation error.
+// FIX: Removed invalid 'required_error' and 'invalid_type_error' properties from z.coerce.number call.
 const additiveSchema = z.object({
-    additive_date: z.string().min(1, "La fecha es requerida."),
+    additive_date: z.string().min(1, "Requerido."),
     additive: z.enum(['BICKO', 'HIMAX', 'CAL', 'OTROS']),
-    additive_quantity: z.coerce.number({invalid_type_error: "Debe ser un número."}).positive("La cantidad debe ser un número positivo."),
-    additive_bio: z.string().min(1, "Debe seleccionar un biodigestor."),
+    additive_quantity: z.coerce.number().positive("La cantidad debe ser mayor a cero."),
+    additive_bio: z.string().min(1, "Requerido."),
 });
 type AdditiveFormData = z.infer<typeof additiveSchema>;
 
@@ -343,10 +349,10 @@ const FosTacCalculator: React.FC = () => {
                             <legend className="text-base font-semibold text-text-primary mb-2">Volúmenes de Titulación</legend>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormField control={form.control} name="vol1" render={({ field }) => (
-                                    <FormItem><FormLabel>Volumen 1 (mL)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Volumen 1 (mL)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
                                 )} />
                                 <FormField control={form.control} name="vol2" render={({ field }) => (
-                                    <FormItem><FormLabel>Volumen 2 (mL)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Volumen 2 (mL)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
                                 )} />
                             </div>
                         </fieldset>
@@ -520,7 +526,7 @@ const Additives: React.FC = () => {
                       <FormField control={form.control} name="additive_quantity" render={({ field }) => (
                           <FormItem>
                               <FormLabel>Cantidad (kg)</FormLabel>
-                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.valueAsNumber)} /></FormControl>
+                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl>
                               <FormMessage />
                           </FormItem>
                       )} />

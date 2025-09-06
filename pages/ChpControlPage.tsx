@@ -29,11 +29,12 @@ interface EnrichedChpChangeRecord extends ChpChangeRecord {
 
 
 // --- Co-located Zod Schema ---
+// FIX: Refactored Zod schema to use valid syntax for number coercion, resolving the TypeScript error.
 const chpSchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
   time: z.string().min(1, "La hora es requerida."),
-  initial_power: z.coerce.number({ invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-  programmed_power: z.coerce.number({ invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+  initial_power: z.coerce.number().nonnegative("El valor no puede ser negativo."),
+  programmed_power: z.coerce.number().nonnegative("El valor no puede ser negativo."),
   reason: z.string().min(1, "El motivo es requerido."),
   observations: z.string().optional(),
 });

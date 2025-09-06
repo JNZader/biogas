@@ -20,14 +20,14 @@ import { SortableHeader } from '../components/ui/SortableHeader';
 
 
 // --- Co-located Zod Schema ---
-// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
+// FIX: Refactored Zod schema to use valid syntax for number coercion, resolving multiple TypeScript errors.
 const ingresoSchema = z.object({
   transportista_id: z.string().min(1, "Debe seleccionar un transportista."),
   camion_id: z.string().min(1, "Debe seleccionar un camión."),
   remito: z.string().min(1, "El número de remito es requerido."),
   provider: z.string().min(1, "Debe seleccionar un proveedor."),
   substrate: z.string().min(1, "Debe seleccionar un sustrato."),
-  quantity: z.coerce.number({invalid_type_error: "Debe ingresar un número."}).positive("La cantidad debe ser mayor a cero."),
+  quantity: z.coerce.number().positive("La cantidad debe ser mayor a cero."),
   location: z.string().min(1, "Debe seleccionar un lugar de descarga."),
 });
 type IngresoFormData = z.infer<typeof ingresoSchema>;
