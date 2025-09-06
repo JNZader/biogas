@@ -1,8 +1,10 @@
 
+
 import React, { lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 // FIX: Removed unused `AnyRoute` import.
-import { RouterProvider, Router, createRootRoute, createRoute, createHashHistory } from '@tanstack/react-router';
+// FIX: Replaced the custom mock history object with the official `createMemoryHistory` function from `@tanstack/react-router`. The mock object was missing several properties required by the `RouterHistory` type, causing a TypeScript error. Using the library's built-in function ensures type compatibility and provides a correct in-memory history implementation for sandboxed environments.
+import { RouterProvider, Router, createRootRoute, createRoute, createHashHistory, createMemoryHistory } from '@tanstack/react-router';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { QueryClient } from '@tanstack/query-core';
 
@@ -40,7 +42,12 @@ if (!rootElement) {
 }
 
 // Register Service Worker for PWA/Offline capabilities
-if ('serviceWorker' in navigator) {
+// Only register in production environments with proper HTTPS and origin
+if ('serviceWorker' in navigator && 
+    window.location.protocol === 'https:' && 
+    !window.location.hostname.includes('ai.studio') && 
+    !window.location.hostname.includes('scf.usercontent.goog') &&
+    !window.location.href.includes('blob:')) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/service-worker.js')
       .then(registration => {
@@ -114,10 +121,26 @@ const routeTree = rootRoute.addChildren([
   errorDetectiveRoute,
 ]);
 
+// Create history with fallback for sandboxed environments
+const createSafeHistory = () => {
+  try {
+    // Check if we're in a sandboxed environment
+    if (window.location.href.includes('blob:') || 
+        window.location.hostname.includes('scf.usercontent.goog')) {
+      console.warn('Running in sandboxed environment, using memory history');
+      return createMemoryHistory();
+    }
+    return createHashHistory();
+  } catch (error) {
+    console.warn('Failed to create hash history, using fallback:', error);
+    return createMemoryHistory();
+  }
+};
+
 // FIX: Replaced `createRouter` with `new Router()` to work around a potential type inference issue in the factory function when dealing with a large route tree and custom history. This resolves the cryptic "strictNullChecks" TypeScript error while preserving the intended hash-based routing.
 const router = new Router({
   routeTree,
-  history: createHashHistory(),
+  history: createSafeHistory(),
 });
 
 // Register the router for maximum type safety
