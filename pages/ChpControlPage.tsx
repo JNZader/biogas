@@ -29,12 +29,12 @@ interface EnrichedChpChangeRecord extends ChpChangeRecord {
 
 
 // --- Co-located Zod Schema ---
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const chpSchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
   time: z.string().min(1, "La hora es requerida."),
-  initial_power: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-  programmed_power: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+  initial_power: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+  programmed_power: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
   reason: z.string().min(1, "El motivo es requerido."),
   observations: z.string().optional(),
 });

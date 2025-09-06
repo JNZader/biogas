@@ -24,26 +24,26 @@ import { SortableHeader } from '../components/ui/SortableHeader';
 
 // --- Co-located Schemas and Types ---
 
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const gasCompositionSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
-    co2: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    ch4: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    o2: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    h2s: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    co2: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    ch4: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    o2: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    h2s: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
 });
 type GasCompositionFormData = z.infer<typeof gasCompositionSchema>;
 
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const additionalMeasurementsSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
-    flow_scada: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo.").optional(),
-    flow_chp: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    power: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    flow_scada: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo.").optional(),
+    flow_chp: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    power: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
 });
 type AdditionalMeasurementsFormData = z.infer<typeof additionalMeasurementsSchema>;
 

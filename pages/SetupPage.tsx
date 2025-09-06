@@ -40,11 +40,11 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
     </button>
 );
 
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const plantDetailsSchema = z.object({
     nombre_planta: z.string().min(1, "El nombre es requerido."),
     ubicacion: z.string().optional(),
-    capacity: z.coerce.number({invalid_type_error: "Debe ser un número."}).positive("La capacidad debe ser un número positivo.").optional(),
+    capacity: z.number({invalid_type_error: "La capacidad debe ser un número."}).positive("La capacidad debe ser un número positivo.").optional(),
     digester_type: z.string().optional(),
 });
 type PlantDetailsFormData = z.infer<typeof plantDetailsSchema>;

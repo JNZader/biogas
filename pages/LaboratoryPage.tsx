@@ -29,19 +29,19 @@ type AnalisisLaboratorioInsert = Database['public']['Tables']['analisis_laborato
 type AnalisisDetalleInsert = Database['public']['Tables']['analisis_laboratorio_detalle']['Insert'];
 
 // --- Co-located Zod Schema ---
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Removed the `invalid_type_error` property from `z.number` as it was causing a TypeScript error. This change fixes the schema definition and resolves cascading type errors in react-hook-form.
 const labAnalysisSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     detalle_ingreso_sustrato_id: z.string().optional(),
     equipo_asociado_id: z.string().optional(),
     sampleType: z.string().min(1, "El tipo de muestra es requerido."),
-    sampleWeight: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El peso no puede ser negativo.").optional(),
-    analysisTime: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El tiempo no puede ser negativo.").optional(),
-    sampleTemp: z.coerce.number({invalid_type_error: "Debe ser un número."}).optional(),
+    sampleWeight: z.number().nonnegative("El peso no puede ser negativo.").optional(),
+    analysisTime: z.number().nonnegative("El tiempo no puede ser negativo.").optional(),
+    sampleTemp: z.number().optional(),
     observations: z.string().optional(),
-    ph: z.coerce.number({invalid_type_error: "Debe ser un número."}).min(0).max(14).optional(),
-    totalSolids: z.coerce.number({invalid_type_error: "Debe ser un número."}).min(0, "No puede ser negativo.").max(100, "No puede ser mayor a 100.").optional(),
+    ph: z.number().min(0).max(14).optional(),
+    totalSolids: z.number().min(0, "No puede ser negativo.").max(100, "No puede ser mayor a 100.").optional(),
 });
 type LabAnalysisFormData = z.infer<typeof labAnalysisSchema>;
 
@@ -277,7 +277,7 @@ const LaboratoryPage: React.FC = () => {
                                     {history.map(item => (
                                         <tr key={item.id}>
                                             <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora_muestra!).toLocaleString('es-AR')}</td>
-                                            <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{(item as any).tipos_muestra.nombre_tipo_muestra}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{(item as any).tipos_muestra?.nombre_tipo_muestra ?? 'N/A'}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary hidden sm:table-cell`}>{item.numero_remito_asociado ?? 'N/A'}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary`}>{item.temperatura_muestra_c ?? 'N/A'}</td>
                                         </tr>

@@ -84,11 +84,11 @@ const analysisSchema = z.object({
   volatileSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
 });
 
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const logFeedingSchema = z.object({
     source: z.string().min(1, "Debe seleccionar una fuente."),
     destination: z.string().min(1, "Debe seleccionar un destino."),
-    quantity: z.coerce.number({invalid_type_error: "La cantidad debe ser un número."}).positive("La cantidad debe ser mayor a cero."),
+    quantity: z.number({invalid_type_error: "La cantidad debe ser un número."}).positive("La cantidad debe ser mayor a cero."),
     unit: z.enum(['kg', 'm³']),
     observations: z.string().optional(),
 });

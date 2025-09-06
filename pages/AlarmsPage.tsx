@@ -51,11 +51,11 @@ interface AlarmDisplayItem {
 }
 
 // --- Co-located Zod Schema ---
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const alertRuleSchema = z.object({
   parameter: z.enum(['fosTac', 'ch4']),
   condition: z.enum(['gt', 'lt', 'eq']),
-  value: z.coerce.number({invalid_type_error: "El valor debe ser un número."}).positive("El valor debe ser positivo."),
+  value: z.number({invalid_type_error: "El valor debe ser un número."}).positive("El valor debe ser positivo."),
   severity: z.enum(['info', 'warning', 'critical']),
 });
 type AlertRuleFormData = z.infer<typeof alertRuleSchema>;

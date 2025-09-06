@@ -168,13 +168,13 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 );
 
 // --- Zod Schemas ---
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const fosTacSchema = z.object({
   equipment: z.string().min(1, "Requerido"),
   date: z.string().min(1, "Requerido"),
-  ph: z.coerce.number({invalid_type_error: 'Debe ser un número'}).min(0, "El pH debe ser >= 0.").max(14, "El pH no puede ser > 14."),
-  vol1: z.coerce.number({invalid_type_error: 'Debe ser un número'}).nonnegative("El volumen no puede ser negativo."),
-  vol2: z.coerce.number({invalid_type_error: 'Debe ser un número'}).nonnegative("El volumen no puede ser negativo."),
+  ph: z.number({invalid_type_error: "El pH debe ser un número."}).min(0, "El pH debe ser >= 0.").max(14, "El pH no puede ser > 14."),
+  vol1: z.number({invalid_type_error: "El volumen debe ser un número."}).nonnegative("El volumen no puede ser negativo."),
+  vol2: z.number({invalid_type_error: "El volumen debe ser un número."}).nonnegative("El volumen no puede ser negativo."),
 }).refine(data => {
     if (typeof data.vol1 === 'number' && typeof data.vol2 === 'number') {
         return data.vol2 >= data.vol1;
@@ -186,22 +186,22 @@ const fosTacSchema = z.object({
 });
 type FosTacFormData = z.infer<typeof fosTacSchema>;
 
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const additiveSchema = z.object({
     additive_date: z.string().min(1, "Requerido"),
     additive: z.enum(['BICKO', 'HIMAX', 'CAL', 'OTROS']),
-    additive_quantity: z.coerce.number({invalid_type_error: "Debe ser un número"}).positive("La cantidad debe ser mayor a cero."),
+    additive_quantity: z.number({invalid_type_error: "La cantidad debe ser un número."}).positive("La cantidad debe ser mayor a cero."),
     additive_bio: z.string().min(1, "Requerido"),
 });
 type AdditiveFormData = z.infer<typeof additiveSchema>;
 
-// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+// FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const physicalParamsSchema = z.object({
   equipment: z.string().min(1, "Requerido."),
   date: z.string().min(1, "Requerido."),
   time: z.string().min(1, "Requerido."),
-  temperature: z.coerce.number({invalid_type_error: "Debe ser un número."}).optional(),
-  level: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El nivel no puede ser negativo."),
+  temperature: z.number({invalid_type_error: "La temperatura debe ser un número."}).optional(),
+  level: z.number({invalid_type_error: "El nivel debe ser un número."}).nonnegative("El nivel no puede ser negativo."),
 });
 type PhysicalParamsFormData = z.infer<typeof physicalParamsSchema>;
 
