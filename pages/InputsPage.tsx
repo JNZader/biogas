@@ -27,7 +27,8 @@ const ingresoSchema = z.object({
   remito: z.string().min(1, "El número de remito es requerido."),
   provider: z.string().min(1, "Debe seleccionar un proveedor."),
   substrate: z.string().min(1, "Debe seleccionar un sustrato."),
-  quantity: z.number({invalid_type_error: "La cantidad debe ser un número."}).positive("La cantidad debe ser mayor a cero."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  quantity: z.number().positive("La cantidad debe ser mayor a cero."),
   location: z.string().min(1, "Debe seleccionar un lugar de descarga."),
 });
 type IngresoFormData = z.infer<typeof ingresoSchema>;

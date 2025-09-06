@@ -9,7 +9,8 @@ import { Textarea } from '../components/ui/Textarea';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
-import { PlusCircleIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { exportToPdf } from '../lib/utils';
 
 type MonitoreoDetalle = Database['public']['Tables']['monitoreos_ambientales_detalle']['Row'] & {
     monitoreos_ambientales: { fecha_monitoreo: string } | null;
@@ -20,18 +21,41 @@ interface DetalleConIdTemporal extends Omit<MonitoreoDetalleInsert, 'monitoreo_i
     tempId: number;
 }
 
+// --- Co-located Constants for Selects ---
+const PARAMETER_OPTIONS = [
+    { value: 'PM10', label: 'PM10 (Partículas)', unit: 'µg/m³' },
+    { value: 'PM2.5', label: 'PM2.5 (Partículas)', unit: 'µg/m³' },
+    { value: 'NOx', label: 'NOx (Óxidos de Nitrógeno)', unit: 'ppm' },
+    { value: 'SO2', label: 'SO2 (Dióxido de Azufre)', unit: 'ppm' },
+    { value: 'CO', label: 'CO (Monóxido de Carbono)', unit: 'ppm' },
+    { value: 'DBO5', label: 'DBO5 (Agua)', unit: 'mg/L' },
+    { value: 'DQO', label: 'DQO (Agua)', unit: 'mg/L' },
+    { value: 'pH', label: 'pH (Agua)', unit: '' },
+    { value: 'Nitrato', label: 'Nitrato (Suelo)', unit: 'mg/kg' },
+    { value: 'Fosfato', label: 'Fosfato (Suelo)', unit: 'mg/kg' },
+    { value: 'Ruido', label: 'Nivel de Ruido', unit: 'dB' },
+];
+
+const UNIT_OPTIONS = ['µg/m³', 'ppm', 'mg/L', 'mg/kg', 'dB', '%', '°C', 'NTU'];
+
 
 const EnvironmentPage: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState('');
 
+    // State for main form
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [monitoringType, setMonitoringType] = useState('Emisiones');
+    const [observations, setObservations] = useState('');
+    
+    // State for details
     const [details, setDetails] = useState<DetalleConIdTemporal[]>([]);
     
     // State for the temporary detail form
     const [parametro, setParametro] = useState('');
     const [valor, setValor] = useState('');
     const [unidad, setUnidad] = useState('');
-    const [cumple, setCumple] = useState(true);
+    const [limiteNormativo, setLimiteNormativo] = useState('');
 
     // Chart state
     const [chartData, setChartData] = useState<MonitoreoDetalle[]>([]);
@@ -65,7 +89,6 @@ const EnvironmentPage: React.FC = () => {
 
             setChartData(recentData);
             if(recentData.length > 0 && !chartParameter){
-                // Set default parameter to the first one found in data
                 setChartParameter(recentData[0].parametro_medido);
             }
 
@@ -74,8 +97,7 @@ const EnvironmentPage: React.FC = () => {
         } finally {
             setChartLoading(false);
         }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: We only want to fetch all data once on mount; filtering is handled in useMemo.
-    }, []);
+    }, [chartParameter]);
 
     useEffect(() => {
         fetchChartData();
@@ -90,13 +112,24 @@ const EnvironmentPage: React.FC = () => {
             .filter(d => d.parametro_medido === chartParameter && d.monitoreos_ambientales)
             .sort((a, b) => new Date(a.monitoreos_ambientales!.fecha_monitoreo).getTime() - new Date(b.monitoreos_ambientales!.fecha_monitoreo).getTime())
             .map(d => ({
-                name: new Date(d.monitoreos_ambientales!.fecha_monitoreo + 'T00:00:00').toLocaleDateString('es-AR', { month: 'short', day: 'numeric' }),
+                Fecha: new Date(d.monitoreos_ambientales!.fecha_monitoreo + 'T00:00:00').toLocaleDateString('es-AR', { month: 'short', day: 'numeric' }),
                 'Límite': d.limite_normativo,
                 'Medición': d.valor,
             }));
 
         return { parameterOptions: options, processedChartData: sortedAndFilteredData };
     }, [chartData, chartParameter]);
+
+    const handleParameterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newParam = e.target.value;
+        setParametro(newParam);
+        const selectedParam = PARAMETER_OPTIONS.find(p => p.value === newParam);
+        if (selectedParam && selectedParam.unit) {
+            setUnidad(selectedParam.unit);
+        } else {
+            setUnidad(''); // Reset if no specific unit
+        }
+    };
 
     const handleAddDetail = () => {
         if (!parametro.trim() || !valor.trim()) {
@@ -109,13 +142,14 @@ const EnvironmentPage: React.FC = () => {
             parametro_medido: parametro,
             valor: parseFloat(valor),
             unidad_medida: unidad,
-            cumple_normativa: cumple,
+            limite_normativo: limiteNormativo ? parseFloat(limiteNormativo) : null,
         };
         setDetails(prev => [...prev, newDetail]);
+        // Reset detail form fields
         setParametro('');
         setValor('');
         setUnidad('');
-        setCumple(true);
+        setLimiteNormativo('');
     };
 
     const handleRemoveDetail = (tempId: number) => {
@@ -127,18 +161,15 @@ const EnvironmentPage: React.FC = () => {
         setIsLoading(true);
         setMessage('');
 
-        const formData = new FormData(e.currentTarget);
-        const data = Object.fromEntries(formData.entries());
-
         try {
             const { data: monitoreoData, error: monitoreoError } = await supabase
                 .from('monitoreos_ambientales')
                 .insert({
                     planta_id: 1, // Hardcoded for demo
                     usuario_operador_id: 1, // Hardcoded for demo
-                    fecha_monitoreo: data.date.toString(),
-                    tipo_monitoreo: data.monitoringType.toString(),
-                    observaciones: data.observations.toString() || null,
+                    fecha_monitoreo: date,
+                    tipo_monitoreo: monitoringType,
+                    observaciones: observations || null,
                 })
                 .select()
                 .single();
@@ -155,7 +186,10 @@ const EnvironmentPage: React.FC = () => {
             }
 
             setMessage('Monitoreo guardado con éxito!');
-            e.currentTarget.reset();
+            // Reset form
+            setDate(new Date().toISOString().split('T')[0]);
+            setMonitoringType('Emisiones');
+            setObservations('');
             setDetails([]);
             fetchChartData(); // Refresh chart data
 
@@ -177,10 +211,10 @@ const EnvironmentPage: React.FC = () => {
           
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><Label htmlFor="date">Fecha Monitoreo</Label><Input id="date" name="date" type="date" defaultValue={new Date().toISOString().split('T')[0]} required className={inputClasses}/></div>
+              <div><Label htmlFor="date">Fecha Monitoreo</Label><Input id="date" name="date" type="date" value={date} onChange={e => setDate(e.target.value)} required className={inputClasses}/></div>
               <div>
                 <Label htmlFor="monitoringType">Tipo de Monitoreo</Label>
-                <Select id="monitoringType" name="monitoringType" required className={inputClasses}>
+                <Select id="monitoringType" name="monitoringType" value={monitoringType} onChange={e => setMonitoringType(e.target.value)} required className={inputClasses}>
                     {['Emisiones', 'Ruido', 'Agua', 'Suelo'].map(type => <option key={type} value={type}>{type}</option>)}
                 </Select>
               </div>
@@ -189,24 +223,28 @@ const EnvironmentPage: React.FC = () => {
             <fieldset className="border-t border-border pt-4 mt-4">
               <legend className="text-base font-semibold text-text-primary mb-2">Parámetros Medidos</legend>
                <div className="p-3 bg-background rounded-lg space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                      <div className="md:col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
+                      <div>
                           <Label htmlFor="param">Parámetro</Label>
-                          <Input type="text" id="param" value={parametro} onChange={e => setParametro(e.target.value)} className={inputClasses} placeholder="Ej: PM10" />
+                          <Select id="param" value={parametro} onChange={handleParameterChange} className={inputClasses}>
+                            <option value="">Seleccione...</option>
+                            {PARAMETER_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                          </Select>
                       </div>
                       <div>
                           <Label htmlFor="value">Valor</Label>
                           <Input type="number" step="any" id="value" value={valor} onChange={e => setValor(e.target.value)} className={inputClasses} placeholder="12.5" min="0"/>
                       </div>
-                      <div className="flex items-center space-x-2">
-                          <div>
-                              <Label htmlFor="unit">Unidad</Label>
-                              <Input type="text" id="unit" value={unidad} onChange={e => setUnidad(e.target.value)} className={inputClasses} placeholder="µg/m³" />
-                          </div>
-                          <div className="flex items-center ml-auto pt-6">
-                              <input type="checkbox" id="compliant" checked={cumple} onChange={e => setCumple(e.target.checked)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
-                              <Label htmlFor="compliant" className="text-sm font-medium text-text-primary ml-2">Cumple</Label>
-                          </div>
+                      <div>
+                          <Label htmlFor="unit">Unidad</Label>
+                          <Select id="unit" value={unidad} onChange={e => setUnidad(e.target.value)} className={inputClasses}>
+                            <option value="">Seleccione...</option>
+                            {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                          </Select>
+                      </div>
+                      <div>
+                          <Label htmlFor="limit">Límite Normativo (Opcional)</Label>
+                          <Input type="number" step="any" id="limit" value={limiteNormativo} onChange={e => setLimiteNormativo(e.target.value)} className={inputClasses} placeholder="20.0" min="0"/>
                       </div>
                    </div>
                    <Button type="button" onClick={handleAddDetail} variant="secondary" className="w-auto px-3 py-1.5 text-sm">
@@ -221,9 +259,6 @@ const EnvironmentPage: React.FC = () => {
                               <div>
                                   <span className="font-medium">{d.parametro_medido}: </span>
                                   <span className="text-text-primary">{d.valor} {d.unidad_medida}</span>
-                                  <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${d.cumple_normativa ? 'bg-success-bg text-success' : 'bg-error-bg text-error'}`}>
-                                      {d.cumple_normativa ? 'Cumple' : 'No Cumple'}
-                                  </span>
                               </div>
                               <button type="button" onClick={() => handleRemoveDetail(d.tempId)} className="p-1 rounded-full hover:bg-error-bg">
                                   <TrashIcon className="h-5 w-5 text-error" />
@@ -236,7 +271,7 @@ const EnvironmentPage: React.FC = () => {
 
             <div>
                 <Label htmlFor="observations">Observaciones Generales</Label>
-                <Textarea id="observations" name="observations" placeholder="Anotar condiciones climáticas u otras observaciones relevantes..." className={inputClasses} />
+                <Textarea id="observations" name="observations" value={observations} onChange={e => setObservations(e.target.value)} placeholder="Anotar condiciones climáticas u otras observaciones relevantes..." className={inputClasses} />
             </div>
             
             {message && <div className={`p-3 rounded-md text-sm ${message.startsWith('Error') ? 'bg-error-bg text-error' : 'bg-success-bg text-success'}`}>{message}</div>}
@@ -250,18 +285,29 @@ const EnvironmentPage: React.FC = () => {
 
       <Card className="mt-6">
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
               <h3 className="text-lg font-semibold text-text-primary">Tendencia Anual de Parámetros</h3>
-              {parameterOptions.length > 0 && (
-                  <select 
-                      value={chartParameter} 
-                      onChange={e => setChartParameter(e.target.value)}
-                      className={`${inputClasses} mt-2 sm:mt-0 sm:w-auto`}
-                      aria-label="Seleccionar parámetro para visualizar"
-                  >
-                      {parameterOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-              )}
+              <div className="flex items-center gap-2">
+                {parameterOptions.length > 0 && (
+                    <Select 
+                        value={chartParameter} 
+                        onChange={e => setChartParameter(e.target.value)}
+                        className={`${inputClasses} mt-2 sm:mt-0 sm:w-auto`}
+                        aria-label="Seleccionar parámetro para visualizar"
+                    >
+                        {parameterOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                    </Select>
+                )}
+                <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => exportToPdf(`Tendencia - ${chartParameter}`, processedChartData)}
+                    disabled={processedChartData.length === 0}
+                >
+                    <ArrowDownTrayIcon className="h-4 w-4 mr-2" />
+                    Exportar PDF
+                </Button>
+              </div>
           </div>
           {chartLoading ? (
               <div className="text-center text-text-secondary py-10">Cargando datos del gráfico...</div>
@@ -276,7 +322,7 @@ const EnvironmentPage: React.FC = () => {
                 <ResponsiveContainer>
                     <LineChart data={processedChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
+                        <XAxis dataKey="Fecha" />
                         <YAxis />
                         <Tooltip />
                         <Legend />

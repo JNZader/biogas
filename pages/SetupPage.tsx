@@ -44,7 +44,8 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 const plantDetailsSchema = z.object({
     nombre_planta: z.string().min(1, "El nombre es requerido."),
     ubicacion: z.string().optional(),
-    capacity: z.number({invalid_type_error: "La capacidad debe ser un número."}).positive("La capacidad debe ser un número positivo.").optional(),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    capacity: z.number().positive("La capacidad debe ser un número positivo.").optional(),
     digester_type: z.string().optional(),
 });
 type PlantDetailsFormData = z.infer<typeof plantDetailsSchema>;

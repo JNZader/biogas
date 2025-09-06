@@ -25,14 +25,22 @@ const PLAN_COMPROMISO_MWH_DIA = 28.8;
 // FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const energySchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
-  total_gen: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  spot_dispatch: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  total_dispatch_smec: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  smec_total: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  chp_total: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
-  motor_hours: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo.").max(24, "No puede exceder 24 horas."),
-  torch_time: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo.").optional(),
-  biogas_flow: z.number({invalid_type_error: "Debe ser un número."}).nonnegative("Debe ser un número no negativo."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  total_gen: z.number().nonnegative("Debe ser un número no negativo."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  spot_dispatch: z.number().nonnegative("Debe ser un número no negativo."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  total_dispatch_smec: z.number().nonnegative("Debe ser un número no negativo."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  smec_total: z.number().nonnegative("Debe ser un número no negativo."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  chp_total: z.number().nonnegative("Debe ser un número no negativo."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  motor_hours: z.number().nonnegative("Debe ser un número no negativo.").max(24, "No puede exceder 24 horas."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  torch_time: z.number().nonnegative("Debe ser un número no negativo.").optional(),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  biogas_flow: z.number().nonnegative("Debe ser un número no negativo."),
 }).refine(data => !data.total_dispatch_smec || data.total_dispatch_smec >= (data.spot_dispatch || 0), {
     message: "El despacho total no puede ser menor que el despacho SPOT.",
     path: ["total_dispatch_smec"],

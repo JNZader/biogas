@@ -29,10 +29,14 @@ const gasCompositionSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
-    co2: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    ch4: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    o2: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    h2s: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    co2: z.number().nonnegative("El valor no puede ser negativo."),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    ch4: z.number().nonnegative("El valor no puede ser negativo."),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    o2: z.number().nonnegative("El valor no puede ser negativo."),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    h2s: z.number().nonnegative("El valor no puede ser negativo."),
 });
 type GasCompositionFormData = z.infer<typeof gasCompositionSchema>;
 
@@ -41,9 +45,12 @@ const additionalMeasurementsSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
-    flow_scada: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo.").optional(),
-    flow_chp: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
-    power: z.number({invalid_type_error: "El valor debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    flow_scada: z.number().nonnegative("El valor no puede ser negativo.").optional(),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    flow_chp: z.number().nonnegative("El valor no puede ser negativo."),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    power: z.number().nonnegative("El valor no puede ser negativo."),
 });
 type AdditionalMeasurementsFormData = z.infer<typeof additionalMeasurementsSchema>;
 

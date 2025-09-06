@@ -88,7 +88,8 @@ const analysisSchema = z.object({
 const logFeedingSchema = z.object({
     source: z.string().min(1, "Debe seleccionar una fuente."),
     destination: z.string().min(1, "Debe seleccionar un destino."),
-    quantity: z.number({invalid_type_error: "La cantidad debe ser un número."}).positive("La cantidad debe ser mayor a cero."),
+    // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    quantity: z.number().positive("La cantidad debe ser mayor a cero."),
     unit: z.enum(['kg', 'm³']),
     observations: z.string().optional(),
 });

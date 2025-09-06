@@ -55,7 +55,8 @@ interface AlarmDisplayItem {
 const alertRuleSchema = z.object({
   parameter: z.enum(['fosTac', 'ch4']),
   condition: z.enum(['gt', 'lt', 'eq']),
-  value: z.number({invalid_type_error: "El valor debe ser un número."}).positive("El valor debe ser positivo."),
+  // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  value: z.number().positive("El valor debe ser positivo."),
   severity: z.enum(['info', 'warning', 'critical']),
 });
 type AlertRuleFormData = z.infer<typeof alertRuleSchema>;
