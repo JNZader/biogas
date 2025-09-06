@@ -49,7 +49,7 @@ const Sidebar: React.FC = () => {
         {
             title: "Operaciones",
             items: [
-                { to: "/", icon: HomeIcon, label: "Dashboard" },
+                { to: "/", icon: HomeIcon, label: "Inicio" },
                 { to: "/inputs", icon: DocumentPlusIcon, label: "Ingresos" },
                 { to: "/feeding", icon: CpuChipIcon, label: "Alimentación" },
             ]
