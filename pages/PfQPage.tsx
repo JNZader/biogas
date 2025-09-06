@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import Page from '../components/Page';
-import { Card, CardContent } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useSupabaseData } from '../contexts/SupabaseContext';
 import { supabase } from '../services/supabaseClient';
@@ -28,7 +28,7 @@ const createFosTac = async (formData: FosTacFormData) => {
         equipo_id: Number(formData.equipment),
         usuario_operador_id: 1, // Hardcoded user ID for demo
         fecha_hora: `${formData.date}T${new Date().toTimeString().slice(0,8)}`,
-        ph: formData.ph || null,
+        ph: formData.ph,
         volumen_1_ml: vol1,
         volumen_2_ml: vol2,
     });
@@ -148,6 +148,12 @@ interface EnrichedAditivoRecord extends AditivoRecord {
     equipos?: { nombre_equipo: string } | null;
 }
 
+type PfqRecord = Database['public']['Tables']['pfq']['Row'];
+interface EnrichedPfqRecord extends PfqRecord {
+    equipos?: { nombre_equipo: string } | null;
+}
+
+
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
     <button
       onClick={onClick}
@@ -162,13 +168,13 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 );
 
 // --- Zod Schemas ---
-// FIX: Removed invalid 'required_error' and 'invalid_type_error' properties from z.coerce.number calls to fix schema validation errors.
+// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
 const fosTacSchema = z.object({
-  equipment: z.string().min(1, "Requerido."),
-  date: z.string().min(1, "Requerido."),
-  ph: z.coerce.number().min(0, "El pH debe ser >= 0.").max(14, "El pH no puede ser > 14."),
-  vol1: z.coerce.number().nonnegative("El volumen no puede ser negativo."),
-  vol2: z.coerce.number().nonnegative("El volumen no puede ser negativo."),
+  equipment: z.string().min(1, "Requerido"),
+  date: z.string().min(1, "Requerido"),
+  ph: z.coerce.number({invalid_type_error: 'Debe ser un número'}).min(0, "El pH debe ser >= 0.").max(14, "El pH no puede ser > 14."),
+  vol1: z.coerce.number({invalid_type_error: 'Debe ser un número'}).nonnegative("El volumen no puede ser negativo."),
+  vol2: z.coerce.number({invalid_type_error: 'Debe ser un número'}).nonnegative("El volumen no puede ser negativo."),
 }).refine(data => {
     if (typeof data.vol1 === 'number' && typeof data.vol2 === 'number') {
         return data.vol2 >= data.vol1;
@@ -180,15 +186,24 @@ const fosTacSchema = z.object({
 });
 type FosTacFormData = z.infer<typeof fosTacSchema>;
 
-// FIX: Removed invalid 'errorMap' property from z.enum to resolve schema validation error.
-// FIX: Removed invalid 'required_error' and 'invalid_type_error' properties from z.coerce.number call.
+// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
 const additiveSchema = z.object({
-    additive_date: z.string().min(1, "Requerido."),
+    additive_date: z.string().min(1, "Requerido"),
     additive: z.enum(['BICKO', 'HIMAX', 'CAL', 'OTROS']),
-    additive_quantity: z.coerce.number().positive("La cantidad debe ser mayor a cero."),
-    additive_bio: z.string().min(1, "Requerido."),
+    additive_quantity: z.coerce.number({invalid_type_error: "Debe ser un número"}).positive("La cantidad debe ser mayor a cero."),
+    additive_bio: z.string().min(1, "Requerido"),
 });
 type AdditiveFormData = z.infer<typeof additiveSchema>;
+
+// FIX: Using z.coerce.number instead of z.number to allow for custom invalid_type_error messages, as the project's Zod types seem to not support this property on z.number. The form's valueAsNumber usage prevents unwanted string-to-number coercion side effects.
+const physicalParamsSchema = z.object({
+  equipment: z.string().min(1, "Requerido."),
+  date: z.string().min(1, "Requerido."),
+  time: z.string().min(1, "Requerido."),
+  temperature: z.coerce.number({invalid_type_error: "Debe ser un número."}).optional(),
+  level: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El nivel no puede ser negativo."),
+});
+type PhysicalParamsFormData = z.infer<typeof physicalParamsSchema>;
 
 
 const FosTacCalculator: React.FC = () => {
@@ -266,7 +281,7 @@ const FosTacCalculator: React.FC = () => {
     const mutation = useMutation({
         mutationFn: createFosTac,
         onSuccess: () => {
-            toast({ title: 'Éxito', description: 'Análisis FOS/TAC guardado con éxito!' });
+            toast({ title: 'Éxito', description: 'Análisis FOS/TAC guardado com éxito!' });
             queryClient.invalidateQueries({ queryKey: ['fosTacHistory'] });
             form.reset();
         },
@@ -479,134 +494,284 @@ const Additives: React.FC = () => {
             form.reset();
         },
         onError: (err: Error) => {
-            toast({ title: 'Error', description: `Error al guardar: ${err.message}`, variant: 'destructive' });
+            toast({ title: 'Error', description: `Error: ${err.message}`, variant: 'destructive' });
         }
     });
 
     const onSubmit = (data: AdditiveFormData) => {
         mutation.mutate(data);
     };
-    
-    const dataToExport = useMemo(() => sortedHistory.map(item => ({
-        fecha_hora: new Date(item.fecha_hora).toLocaleString('es-AR'),
-        aditivo: item.tipo_aditivo,
-        cantidad_kg: item.cantidad_kg,
-        equipo: item.equipo_nombre,
-    })), [sortedHistory]);
 
     const commonTableClasses = {
         cell: "px-4 py-3 whitespace-nowrap text-sm",
     };
 
-    if (dataError) {
-        return <Card><CardContent className="pt-6"><p className="text-error">{dataError}</p></CardContent></Card>
-    }
+    return (
+        <div className="space-y-6">
+            <Card>
+                <CardContent className="pt-6">
+                    <h2 className="text-lg font-semibold text-text-primary mb-4">Registrar Aditivos</h2>
+                    <Form {...form}>
+                        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+                            <FormField control={form.control} name="additive_date" render={({ field }) => (
+                                <FormItem><FormLabel>Fecha</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="additive" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Tipo de Aditivo</FormLabel>
+                                    <FormControl>
+                                        <Select {...field}>
+                                            <option value="BICKO">BICKO</option>
+                                            <option value="HIMAX">HIMAX</option>
+                                            <option value="CAL">CAL</option>
+                                            <option value="OTROS">OTROS</option>
+                                        </Select>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                             <FormField control={form.control} name="additive_quantity" render={({ field }) => (
+                                <FormItem><FormLabel>Cantidad (kg)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                            )} />
+                            <FormField control={form.control} name="additive_bio" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Biodigestor</FormLabel>
+                                    <FormControl>
+                                        <Select {...field} disabled={dataLoading}>
+                                            <option value="">{dataLoading ? 'Cargando...' : 'Seleccione'}</option>
+                                            {biodigestores.map(b => <option key={b.id} value={String(b.id)}>{b.nombre_equipo}</option>)}
+                                        </Select>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <Button type="submit" variant="default" isLoading={mutation.isPending}>Guardar Registro</Button>
+                        </form>
+                    </Form>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardContent className="pt-6">
+                   <h2 className="text-lg font-semibold text-text-primary mb-4">Historial de Aditivos</h2>
+                   {historyLoading ? <p className="text-center text-text-secondary">Cargando...</p> : historyError ? <p className="text-center text-error">{(historyError as Error).message}</p> : (
+                       <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-border">
+                                <thead className="bg-background">
+                                    <tr>
+                                        <SortableHeader columnKey="fecha_hora" title="Fecha" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="tipo_aditivo" title="Tipo Aditivo" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="cantidad_kg" title="Cantidad (kg)" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="equipo_nombre" title="Biodigestor" sortConfig={sortConfig} onSort={requestSort} />
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-surface divide-y divide-border">
+                                    {sortedHistory.length === 0 ? (
+                                        <tr><td colSpan={4} className="text-center py-4 text-text-secondary">No hay registros.</td></tr>
+                                    ) : sortedHistory.map(item => (
+                                        <tr key={item.id}>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora).toLocaleDateString('es-AR')}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.tipo_aditivo}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{item.cantidad_kg}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{item.equipo_nombre}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                       </div>
+                   )}
+                </CardContent>
+             </Card>
+        </div>
+    )
+};
+
+const PhysicalParameters: React.FC = () => {
+    const { equipos, loading: dataLoading, error: dataError } = useSupabaseData();
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+
+    const form = useForm<PhysicalParamsFormData>({
+        resolver: zodResolver(physicalParamsSchema),
+        defaultValues: {
+            equipment: '',
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toTimeString().slice(0, 5),
+            level: undefined,
+            temperature: undefined,
+        },
+    });
+    
+    const level = form.watch('level');
+    const selectedEquipmentId = form.watch('equipment');
+    const biodigestores = useMemo(() => 
+        equipos.filter(e => e.categoria?.toLowerCase().includes('biodigestor')), 
+    [equipos]);
+
+    const { volume, capacityPercentage } = useMemo(() => {
+        if (!level || !selectedEquipmentId) return { volume: 0, capacityPercentage: 0 };
+        const biodigester = biodigestores.find(b => b.id === Number(selectedEquipmentId));
+        const specs = biodigester?.especificaciones_tecnicas as any;
+        const diameter = specs?.diameter;
+        const height = specs?.height;
+
+        if (!diameter || !height) return { volume: 0, capacityPercentage: 0 };
+        
+        const radius = diameter / 2;
+        const totalVolume = Math.PI * Math.pow(radius, 2) * height;
+        const currentVolume = Math.PI * Math.pow(radius, 2) * level;
+        const percentage = totalVolume > 0 ? (currentVolume / totalVolume) * 100 : 0;
+        
+        return { volume: currentVolume, capacityPercentage: percentage };
+
+    }, [level, selectedEquipmentId, biodigestores]);
+
+    const { data: history = [], isLoading: historyLoading } = useQuery({
+        queryKey: ['physicalParamsHistory', selectedEquipmentId],
+        queryFn: async () => {
+            let query = supabase.from('pfq').select('*, equipos (nombre_equipo)').order('fecha_hora_medicion', { ascending: false }).limit(10);
+            if (selectedEquipmentId) {
+                query = query.eq('equipo_id_fk', Number(selectedEquipmentId));
+            }
+            const { data, error } = await query;
+            if (error) throw error;
+            return data;
+        },
+        enabled: !dataLoading
+    });
+
+    const displayHistory = useMemo(() => (history as EnrichedPfqRecord[]).map(item => ({
+        ...item,
+        equipo_nombre: item.equipos?.nombre_equipo ?? 'N/A',
+    })), [history]);
+
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(displayHistory, { key: 'fecha_hora_medicion', direction: 'descending' });
+
+    const mutation = useMutation({
+        mutationFn: async (formData: PhysicalParamsFormData) => {
+            const { error } = await supabase.from('pfq').insert({
+                planta_id: 1,
+                usuario_operador_id_fk: 1, // hardcoded
+                equipo_id_fk: Number(formData.equipment),
+                fecha_hora_medicion: `${formData.date}T${formData.time}:00`,
+                temperatura_c: formData.temperature,
+                nivel_m: formData.level,
+            });
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            toast({ title: 'Éxito', description: 'Parámetros guardados con éxito.' });
+            queryClient.invalidateQueries({ queryKey: ['physicalParamsHistory'] });
+            form.reset();
+        },
+        onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    });
+    
+    const commonTableClasses = {
+        cell: "px-4 py-3 whitespace-nowrap text-sm",
+    };
 
     return (
         <div className="space-y-6">
             <Card>
                 <CardContent className="pt-6">
-                  <h2 className="text-lg font-semibold text-text-primary mb-4">Registro de Aditivos</h2>
-                  <Form {...form}>
-                  <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-                      <FormField control={form.control} name="additive_date" render={({ field }) => (
-                          <FormItem><FormLabel>Fecha</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={form.control} name="additive" render={({ field }) => (
-                          <FormItem>
-                              <FormLabel>Aditivo</FormLabel>
-                              <FormControl>
-                                  <Select {...field}>
-                                      {['BICKO', 'HIMAX', 'CAL', 'OTROS'].map(o => <option key={o} value={o}>{o}</option>)}
-                                  </Select>
-                              </FormControl>
-                              <FormMessage />
-                          </FormItem>
-                      )} />
-                      <FormField control={form.control} name="additive_quantity" render={({ field }) => (
-                          <FormItem>
-                              <FormLabel>Cantidad (kg)</FormLabel>
-                              <FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl>
-                              <FormMessage />
-                          </FormItem>
-                      )} />
-                      <FormField control={form.control} name="additive_bio" render={({ field }) => (
-                          <FormItem>
-                              <FormLabel>Biodigestor</FormLabel>
-                              <FormControl>
-                                  <Select {...field} disabled={dataLoading}>
-                                      <option value="">{dataLoading ? 'Cargando...' : 'Seleccione Biodigestor'}</option>
-                                      {biodigestores.map(e => <option key={e.id} value={String(e.id)}>{e.nombre_equipo}</option>)}
-                                  </Select>
-                              </FormControl>
-                              <FormMessage />
-                          </FormItem>
-                      )} />
-                      <Button type="submit" variant="secondary" isLoading={mutation.isPending || dataLoading} disabled={dataLoading}>Guardar Registro</Button>
-                  </form>
-                  </Form>
+                    <h2 className="text-lg font-semibold text-text-primary mb-4">Registrar Parámetros Físicos</h2>
+                    <Form {...form}>
+                        <form className="space-y-4" onSubmit={form.handleSubmit((d) => mutation.mutate(d))}>
+                            <FormField control={form.control} name="equipment" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Biodigestor</FormLabel>
+                                    <FormControl>
+                                        <Select {...field} disabled={dataLoading}>
+                                            <option value="">{dataLoading ? 'Cargando...' : 'Seleccione'}</option>
+                                            {biodigestores.map(b => <option key={b.id} value={String(b.id)}>{b.nombre_equipo}</option>)}
+                                        </Select>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField control={form.control} name="date" render={({ field }) => (<FormItem><FormLabel>Fecha</FormLabel><FormControl><Input type="date" {...field}/></FormControl><FormMessage /></FormItem>)} />
+                                <FormField control={form.control} name="time" render={({ field }) => (<FormItem><FormLabel>Hora</FormLabel><FormControl><Input type="time" {...field}/></FormControl><FormMessage /></FormItem>)} />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField control={form.control} name="temperature" render={({ field }) => (<FormItem><FormLabel>Temperatura (°C)</FormLabel><FormControl><Input type="number" step="0.1" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)}/></FormControl><FormMessage /></FormItem>)} />
+                                <FormField control={form.control} name="level" render={({ field }) => (<FormItem><FormLabel>Nivel (m)</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)}/></FormControl><FormMessage /></FormItem>)} />
+                            </div>
+
+                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
+                                <div className="text-center p-2 bg-background rounded">
+                                    <p className="text-sm text-text-secondary">Volumen Actual Estimado</p>
+                                    <p className="text-xl font-bold text-primary">{volume.toFixed(2)} m³</p>
+                                </div>
+                                <div className="text-center p-2 bg-background rounded">
+                                    <p className="text-sm text-text-secondary">Porcentaje de Capacidad</p>
+                                    <p className="text-xl font-bold text-primary">{capacityPercentage.toFixed(1)} %</p>
+                                </div>
+                            </div>
+                            
+                            <Button type="submit" isLoading={mutation.isPending}>Guardar Medición</Button>
+                        </form>
+                    </Form>
                 </CardContent>
             </Card>
 
             <Card>
-                <CardContent className="pt-6">
-                  <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-text-primary">Historial de Aditivos Recientes</h3>
-                        <ExportButton data={dataToExport} filename="historial_aditivos" disabled={sortedHistory.length === 0} />
-                  </div>
-                  {historyLoading ? (
-                      <p className="text-center text-text-secondary">Cargando historial...</p>
-                  ) : historyError ? (
-                      <p className="text-center text-error">{(historyError as Error).message}</p>
-                  ) : sortedHistory.length === 0 ? (
-                      <p className="text-center text-text-secondary py-4">No hay registros de aditivos.</p>
-                  ) : (
-                      <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-border">
-                               <thead className="bg-background">
-                                   <tr>
-                                       <SortableHeader columnKey="fecha_hora" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
-                                       <SortableHeader columnKey="tipo_aditivo" title="Aditivo" sortConfig={sortConfig} onSort={requestSort} />
-                                       <SortableHeader columnKey="cantidad_kg" title="Cantidad (kg)" sortConfig={sortConfig} onSort={requestSort} />
-                                       <SortableHeader columnKey="equipo_nombre" title="Equipo" sortConfig={sortConfig} onSort={requestSort} />
-                                   </tr>
-                               </thead>
-                               <tbody className="bg-surface divide-y divide-border">
-                                  {sortedHistory.map(item => (
-                                      <tr key={item.id}>
-                                          <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora).toLocaleString('es-AR')}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.tipo_aditivo}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary`}>{item.cantidad_kg}</td>
-                                          <td className={`${commonTableClasses.cell} text-text-primary`}>{item.equipo_nombre}</td>
-                                      </tr>
-                                  ))}
-                               </tbody>
-                          </table>
-                      </div>
-                  )}
+                <CardHeader><CardTitle>Historial de Mediciones Físicas</CardTitle></CardHeader>
+                <CardContent>
+                    {historyLoading ? <p>Cargando...</p> : (
+                        <div className="overflow-x-auto">
+                           <table className="min-w-full divide-y divide-border">
+                                <thead className="bg-background">
+                                    <tr>
+                                        <SortableHeader columnKey="fecha_hora_medicion" title="Fecha" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="equipo_nombre" title="Equipo" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="temperatura_c" title="Temp (°C)" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="nivel_m" title="Nivel (m)" sortConfig={sortConfig} onSort={requestSort} />
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-surface divide-y divide-border">
+                                    {sortedHistory.length === 0 ? (
+                                        <tr><td colSpan={4} className="text-center py-4 text-text-secondary">No hay mediciones.</td></tr>
+                                    ) : sortedHistory.map(item => (
+                                        <tr key={item.id}>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora_medicion).toLocaleString('es-AR')}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{item.equipo_nombre}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{item.temperatura_c ?? 'N/A'}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-primary`}>{item.nivel_m ?? 'N/A'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                           </table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
     );
 };
 
-
 const PfQPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'fos' | 'additives'>('fos');
+  const [activeTab, setActiveTab] = useState<'fosTac' | 'additives' | 'physical'>('fosTac');
+
   return (
     <Page>
       <div className="mb-4 border-b border-border">
         <nav className="-mb-px flex space-x-4" aria-label="Tabs">
-          <TabButton active={activeTab === 'fos'} onClick={() => setActiveTab('fos')}>
-            FOS/TAC
+          <TabButton active={activeTab === 'fosTac'} onClick={() => setActiveTab('fosTac')}>
+            Análisis FOS/TAC
           </TabButton>
           <TabButton active={activeTab === 'additives'} onClick={() => setActiveTab('additives')}>
             Aditivos
           </TabButton>
+          <TabButton active={activeTab === 'physical'} onClick={() => setActiveTab('physical')}>
+            Parámetros Físicos
+          </TabButton>
         </nav>
       </div>
       <div>
-        {activeTab === 'fos' ? <FosTacCalculator /> : <Additives />}
+        {activeTab === 'fosTac' && <FosTacCalculator />}
+        {activeTab === 'additives' && <Additives />}
+        {activeTab === 'physical' && <PhysicalParameters />}
       </div>
     </Page>
   );

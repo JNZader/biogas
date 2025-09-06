@@ -54,6 +54,7 @@ if (supabaseUrl && supabaseAnonKey) {
         const types = ['Biodigestor', 'Bomba', 'Agitador', 'Generador (CHP)', 'Soplador', 'Analizador de Gas', 'Tolva', 'Silo'];
         const areas = ['Recepción', 'Pre-tratamiento', 'Digestión', 'Post-tratamiento', 'Generación de Energía'];
         const type = types[i % types.length];
+        const isBiodigester = type === 'Biodigestor';
         return {
             id: i + 1,
             nombre_equipo: `${type} #${i + 1}`,
@@ -62,8 +63,9 @@ if (supabaseUrl && supabaseAnonKey) {
             planta_id: 1,
             especificaciones_tecnicas: {
                 area: areas[i % areas.length],
-                capacityValue: (Math.random() * 1000).toFixed(0),
-                capacityUnit: type === 'Biodigestor' ? 'm³' : 'kW',
+                capacityValue: isBiodigester ? '5000' : (Math.random() * 1000).toFixed(0),
+                capacityUnit: isBiodigester ? 'm³' : 'kW',
+                ...(isBiodigester && { diameter: 25, height: 10 })
             },
         };
     }),
@@ -92,6 +94,20 @@ if (supabaseUrl && supabaseAnonKey) {
             tac_mg_l: tac,
             relacion_fos_tac: ratio,
             equipo_id: 1, // Biodigestor #1
+            ph: 7.8 + Math.random() * 0.4 - 0.2,
+        };
+    }),
+    pfq: Array.from({ length: 10 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        return {
+            id: i + 1,
+            fecha_hora_medicion: date.toISOString(),
+            equipo_id_fk: 1, // Biodigestor #1
+            temperatura_c: 38.5 + Math.random() * 2 - 1,
+            nivel_m: 7.5 + Math.random() * 1 - 0.5,
+            planta_id: 1,
+            usuario_operador_id_fk: 1,
         };
     }),
     lecturas_gas: Array.from({ length: 180 }, (_, i) => { // 2 readings a day for 90 days

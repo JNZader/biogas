@@ -2,14 +2,16 @@
 import React from "react";
 import type { ToastActionElement, ToastProps } from "../components/ui/Toast";
 
+const TOAST_LIFETIME = 5000;
 const TOAST_LIMIT = 5;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_REMOVE_DELAY = 1000;
 
 type ToasterToast = ToastProps & {
   id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;
+  duration?: number;
 };
 
 const actionTypes = {
@@ -112,10 +114,31 @@ const listeners: Array<(state: State) => void> = [];
 let memoryState: State = { toasts: [] };
 
 function dispatch(action: Action) {
+  if (action.type === 'DISMISS_TOAST' || action.type === 'REMOVE_TOAST') {
+      if (action.toastId) {
+          clearTimeout(toastTimeouts.get(action.toastId));
+          toastTimeouts.delete(action.toastId);
+      } else {
+          toastTimeouts.forEach(t => clearTimeout(t));
+          toastTimeouts.clear();
+      }
+  }
+
   memoryState = reducer(memoryState, action);
   listeners.forEach((listener) => {
     listener(memoryState);
   });
+
+  if (action.type === 'ADD_TOAST') {
+    const { toast } = action;
+    const duration = toast.duration === Infinity ? Infinity : toast.duration || TOAST_LIFETIME;
+    if (duration !== Infinity) {
+        const timer = setTimeout(() => {
+            dispatch({ type: 'DISMISS_TOAST', toastId: toast.id });
+        }, duration);
+        toastTimeouts.set(toast.id, timer);
+    }
+  }
 }
 
 type Toast = Omit<ToasterToast, "id">;
