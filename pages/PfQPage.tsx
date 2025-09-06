@@ -170,13 +170,16 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 // --- Zod Schemas ---
 // FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const fosTacSchema = z.object({
-  equipment: z.string().min(1, "Requerido"),
-  date: z.string().min(1, "Requerido"),
+  equipment: z.string().min(1, "Debe seleccionar un equipo."),
+  date: z.string().min(1, "La fecha es requerida."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   ph: z.number().min(0, "El pH debe ser >= 0.").max(14, "El pH no puede ser > 14."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   vol1: z.number().nonnegative("El volumen no puede ser negativo."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   vol2: z.number().nonnegative("El volumen no puede ser negativo."),
 }).refine(data => {
     if (typeof data.vol1 === 'number' && typeof data.vol2 === 'number') {
@@ -191,22 +194,24 @@ type FosTacFormData = z.infer<typeof fosTacSchema>;
 
 // FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const additiveSchema = z.object({
-    additive_date: z.string().min(1, "Requerido"),
+    additive_date: z.string().min(1, "La fecha es requerida."),
     additive: z.enum(['BICKO', 'HIMAX', 'CAL', 'OTROS']),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     additive_quantity: z.number().positive("La cantidad debe ser mayor a cero."),
-    additive_bio: z.string().min(1, "Requerido"),
+    additive_bio: z.string().min(1, "Debe seleccionar un biodigestor."),
 });
 type AdditiveFormData = z.infer<typeof additiveSchema>;
 
 // FIX: Replaced `z.coerce.number()` with `z.number()` to resolve type inference issues with react-hook-form. The `onChange` handler for the input already provides a numeric value using `e.target.valueAsNumber`, so the previous schema was causing a type mismatch.
 const physicalParamsSchema = z.object({
-  equipment: z.string().min(1, "Requerido."),
-  date: z.string().min(1, "Requerido."),
-  time: z.string().min(1, "Requerido."),
+  equipment: z.string().min(1, "Debe seleccionar un equipo."),
+  date: z.string().min(1, "La fecha es requerida."),
+  time: z.string().min(1, "La hora es requerida."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
   temperature: z.number().optional(),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   level: z.number().nonnegative("El nivel no puede ser negativo."),
 });
 type PhysicalParamsFormData = z.infer<typeof physicalParamsSchema>;

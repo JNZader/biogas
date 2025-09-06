@@ -30,12 +30,16 @@ const gasCompositionSchema = z.object({
     time: z.string().min(1, "La hora es requerida."),
     equipo_id: z.string().min(1, "Debe seleccionar un equipo."),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     co2: z.number().nonnegative("El valor no puede ser negativo."),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     ch4: z.number().nonnegative("El valor no puede ser negativo."),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     o2: z.number().nonnegative("El valor no puede ser negativo."),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     h2s: z.number().nonnegative("El valor no puede ser negativo."),
 });
 type GasCompositionFormData = z.infer<typeof gasCompositionSchema>;
@@ -48,8 +52,10 @@ const additionalMeasurementsSchema = z.object({
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
     flow_scada: z.number().nonnegative("El valor no puede ser negativo.").optional(),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     flow_chp: z.number().nonnegative("El valor no puede ser negativo."),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     power: z.number().nonnegative("El valor no puede ser negativo."),
 });
 type AdditionalMeasurementsFormData = z.infer<typeof additionalMeasurementsSchema>;
@@ -202,11 +208,7 @@ const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; di
                 <ArrowDownTrayIcon className="h-4 w-4 mr-2" /> Exportar <ChevronDownIcon className={cn("h-4 w-4 ml-1 transition-transform", { "rotate-180": isOpen })} />
             </Button>
             <div className={cn("absolute right-0 mt-2 w-48 origin-top-right rounded-md shadow-lg bg-surface ring-1 ring-black ring-opacity-5 z-10 transition-all duration-100 ease-out", isOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none")}>
-                <div className="py-1" role="menu" aria-orientation="vertical">
-                    <button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">CSV</button>
-                    <button onClick={() => handleExport('xlsx')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">XLSX</button>
-                    <button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">PDF</button>
-                </div>
+                <div className="py-1" role="menu" aria-orientation="vertical"><button onClick={() => handleExport('csv')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">CSV</button><button onClick={() => handleExport('xlsx')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">XLSX</button><button onClick={() => handleExport('pdf')} className="w-full text-left block px-4 py-2 text-sm text-text-primary hover:bg-background" role="menuitem">PDF</button></div>
             </div>
         </div>
     );

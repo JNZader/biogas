@@ -77,10 +77,15 @@ const SimpleMarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
 
 // --- Co-located Zod Schemas ---
 const analysisSchema = z.object({
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   lipids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   proteins: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   carbs: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   totalSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   volatileSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
 });
 
@@ -89,6 +94,7 @@ const logFeedingSchema = z.object({
     source: z.string().min(1, "Debe seleccionar una fuente."),
     destination: z.string().min(1, "Debe seleccionar un destino."),
     // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+    // FIX: Removed `required_error` from z.number() to fix TypeScript error.
     quantity: z.number().positive("La cantidad debe ser mayor a cero."),
     unit: z.enum(['kg', 'm³']),
     observations: z.string().optional(),
@@ -508,7 +514,7 @@ const LogFeeding: React.FC = () => {
 };
 
 const FeedingPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'ai' | 'log'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'log'>('log');
 
   return (
     <Page>

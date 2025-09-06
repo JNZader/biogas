@@ -28,6 +28,7 @@ const ingresoSchema = z.object({
   provider: z.string().min(1, "Debe seleccionar un proveedor."),
   substrate: z.string().min(1, "Debe seleccionar un sustrato."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   quantity: z.number().positive("La cantidad debe ser mayor a cero."),
   location: z.string().min(1, "Debe seleccionar un lugar de descarga."),
 });

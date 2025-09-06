@@ -96,7 +96,7 @@ interface InvestigationResult {
 }
 
 const errorAnalysisSchema = z.object({
-  errorText: z.string().min(20, 'Please provide a more detailed error message or stack trace.'),
+  errorText: z.string().min(20, 'Por favor, proporcione un mensaje de error o stack trace más detallado.'),
 });
 type ErrorAnalysisFormData = z.infer<typeof errorAnalysisSchema>;
 

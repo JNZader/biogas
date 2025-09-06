@@ -34,8 +34,10 @@ const chpSchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
   time: z.string().min(1, "La hora es requerida."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   initial_power: z.number().nonnegative("El valor no puede ser negativo."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   programmed_power: z.number().nonnegative("El valor no puede ser negativo."),
   reason: z.string().min(1, "El motivo es requerido."),
   observations: z.string().optional(),

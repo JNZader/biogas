@@ -57,6 +57,7 @@ const alertRuleSchema = z.object({
   parameter: z.enum(['fosTac', 'ch4']),
   condition: z.enum(['gt', 'lt', 'eq']),
   // FIX: Removed the object with `required_error` and `invalid_type_error` from `z.number()` to fix a TypeScript error. `z.number()` does not accept `required_error`, and this change aligns with the consistent schema pattern used throughout the project.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   value: z.number().positive("El valor debe ser positivo."),
   severity: z.enum(['info', 'warning', 'critical']),
 });

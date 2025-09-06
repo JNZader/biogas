@@ -26,20 +26,27 @@ const PLAN_COMPROMISO_MWH_DIA = 28.8;
 const energySchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   total_gen: z.number().nonnegative("Debe ser un número no negativo."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   spot_dispatch: z.number().nonnegative("Debe ser un número no negativo."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   total_dispatch_smec: z.number().nonnegative("Debe ser un número no negativo."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   smec_total: z.number().nonnegative("Debe ser un número no negativo."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   chp_total: z.number().nonnegative("Debe ser un número no negativo."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   motor_hours: z.number().nonnegative("Debe ser un número no negativo.").max(24, "No puede exceder 24 horas."),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
   torch_time: z.number().nonnegative("Debe ser un número no negativo.").optional(),
   // FIX: Removed invalid_type_error from z.number() to fix TypeScript error.
+  // FIX: Removed `required_error` from z.number() to fix TypeScript error.
   biogas_flow: z.number().nonnegative("Debe ser un número no negativo."),
 }).refine(data => !data.total_dispatch_smec || data.total_dispatch_smec >= (data.spot_dispatch || 0), {
     message: "El despacho total no puede ser menor que el despacho SPOT.",
