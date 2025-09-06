@@ -24,11 +24,10 @@ const ingresoSchema = z.object({
   remito: z.string().min(1, "Requerido"),
   provider: z.string().min(1, "Requerido"),
   substrate: z.string().min(1, "Requerido"),
-  // FIX: Replaced `z.number` with `z.coerce.number` to ensure string values from the form input are correctly converted to numbers before validation. This resolves a TypeScript error related to Zod's type inference and is a more robust way to handle numeric form fields.
-  quantity: z.coerce.number({ 
-      invalid_type_error: "Debe ingresar un número.",
-      required_error: "Requerido" 
-  }).positive({ message: "La cantidad debe ser mayor a cero." }),
+  // FIX: Replaced `z.coerce.number()` with `z.number()` to resolve a type mismatch with `react-hook-form`'s `zodResolver`.
+  // The `coerce` helper creates a schema with a different input type (`unknown`) than its output type (`number`), causing type inference issues.
+  // The form's `onChange` handler already correctly provides a numeric value.
+  quantity: z.number({invalid_type_error: "La cantidad debe ser un número."}).positive({ message: "La cantidad debe ser mayor a cero." }),
   location: z.string().min(1, "Requerido"),
 });
 type IngresoFormData = z.infer<typeof ingresoSchema>;
