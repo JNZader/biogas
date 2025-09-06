@@ -329,23 +329,47 @@ if (supabaseUrl && supabaseAnonKey) {
         },
         insert: (newData: any) => {
             const items = Array.isArray(newData) ? newData : [newData];
+            const insertedItems: any[] = [];
+            
             items.forEach(item => {
                 const newId = Math.max(...data.map(d => d.id || 0), 0) + 1;
-                data.push({ ...item, id: newId, created_at: new Date().toISOString() });
+                const newItem = { ...item, id: newId, created_at: new Date().toISOString() };
+                data.push(newItem);
+                insertedItems.push(newItem);
             });
-            const p = Promise.resolve({ data: items, error: null });
-            (p as any).select = () => p;
-            (p as any).single = () => new Promise(resolve => {
-                p.then(result => {
-                    if (result.error) {
-                        resolve({ data: null, error: result.error });
-                    } else {
-                        const singleData = result.data && result.data.length > 0 ? result.data[0] : null;
-                        resolve({ data: singleData, error: null });
-                    }
-                });
-            });
-            return p;
+            
+            // Create a chainable object that supports .select().single()
+            const result: any = {
+                data: insertedItems,
+                error: null,
+                select: () => {
+                    const selectResult: any = {
+                        data: insertedItems,
+                        error: null,
+                        single: () => {
+                            return Promise.resolve({
+                                data: insertedItems.length === 1 ? insertedItems[0] : null,
+                                error: insertedItems.length !== 1 ? { message: 'Expected single row' } : null
+                            });
+                        },
+                        then: (onfulfilled: any, onrejected: any) => {
+                            return Promise.resolve({ data: insertedItems, error: null }).then(onfulfilled, onrejected);
+                        }
+                    };
+                    return selectResult;
+                },
+                single: () => {
+                    return Promise.resolve({
+                        data: insertedItems.length === 1 ? insertedItems[0] : null,
+                        error: insertedItems.length !== 1 ? { message: 'Expected single row' } : null
+                    });
+                },
+                then: (onfulfilled: any, onrejected: any) => {
+                    return Promise.resolve({ data: insertedItems, error: null }).then(onfulfilled, onrejected);
+                }
+            };
+            
+            return result;
         },
         update: (newData: any) => {
             const p = new Promise(resolve => {
