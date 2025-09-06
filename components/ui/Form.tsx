@@ -81,12 +81,12 @@ const FormLabel = React.forwardRef<
   React.ElementRef<typeof Label>,
   React.ComponentPropsWithoutRef<typeof Label>
 >(({ className, ...props }, ref) => {
-  const { error, formItemId } = useFormField();
+  const { formItemId } = useFormField();
 
   return (
     <Label
       ref={ref}
-      className={cn(error && 'text-error', "mb-0", className)}
+      className={cn("mb-0", className)}
       htmlFor={formItemId}
       {...props}
     />

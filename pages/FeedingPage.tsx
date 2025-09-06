@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
-import { PlusCircleIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ArrowDownTrayIcon, ChevronDownIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { cn } from '../lib/utils';
@@ -83,10 +83,13 @@ const analysisSchema = z.object({
 });
 
 const logFeedingSchema = z.object({
-    source: z.string().min(1, "Debe seleccionar un origen."),
-    destination: z.string().min(1, "Debe seleccionar un destino."),
-    quantity: z.number()
-          .positive({ message: "La cantidad debe ser mayor a cero." }),
+    source: z.string().min(1, "Este campo es requerido."),
+    destination: z.string().min(1, "Este campo es requerido."),
+    // FIX: Replaced `z.coerce.number` with an explicit `z.number({ coerce: true, ... })` to resolve a TypeScript error related to an unknown property `invalid_type_error`. The original usage was likely incompatible with the Zod version in the project. This change maintains the coercion behavior and custom error message while ensuring the schema is valid, which resolves a cascade of type errors in `react-hook-form` that were caused by Zod failing to infer the correct type for the `quantity` field.
+    quantity: z.number({ 
+        coerce: true, 
+        invalid_type_error: "Debe ingresar un número." 
+    }).positive({ message: "La cantidad debe ser mayor a cero." }),
     unit: z.enum(['kg', 'm³']),
     observations: z.string().optional(),
 });
@@ -96,7 +99,7 @@ const logFeedingSchema = z.object({
 const fetchAlimentacionHistory = async () => {
     const { data, error } = await supabase
         .from('alimentacion_biodigestor')
-        .select('*, equipo_origen:equipos!alimentacion_biodigestor_equipo_origen_id_fkey(nombre_equipo), equipo_destino:equipos!alimentacion_biodigestor_equipo_destino_id_fkey(nombre_equipo)')
+        .select('*, equipo_origen:equipos!alimentacion_biodigestor_equipo_origen_id_fkey(nombre_equipo), equipo_destino:equipos!alimentacion_biodigestor_equipo_destino_id_fkey(nombre_equipo), usuario_operador:usuarios!alimentacion_biodigestor_usuario_operador_id_fkey(nombres)')
         .order('fecha_hora', { ascending: false }).limit(10);
     if (error) throw error;
     return data;
@@ -121,6 +124,7 @@ type AlimentacionRecord = Database['public']['Tables']['alimentacion_biodigestor
 interface EnrichedAlimentacionRecord extends AlimentacionRecord {
     equipo_origen?: { nombre_equipo: string } | null;
     equipo_destino?: { nombre_equipo: string } | null;
+    usuario_operador?: { nombres: string } | null;
 }
 
 const ExportButton: React.FC<{ data: Record<string, any>[]; filename: string; disabled?: boolean; }> = ({ data, filename, disabled }) => {
@@ -204,6 +208,14 @@ const AIPrediction: React.FC = () => {
       volatileSolids: 80,
     },
   });
+  
+  const labelMap: Record<keyof SubstrateAnalysis, string> = {
+    lipids: 'Lípidos',
+    proteins: 'Proteínas',
+    carbs: 'Carbohidratos',
+    totalSolids: 'Sólidos Totales',
+    volatileSolids: 'Sólidos Volátiles',
+  };
 
   const onSubmit = async (data: z.infer<typeof analysisSchema>) => {
     setIsLoading(true);
@@ -232,7 +244,7 @@ const AIPrediction: React.FC = () => {
                 name={key as keyof z.infer<typeof analysisSchema>}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="capitalize">{key.replace(/([A-Z])/g, ' $1')} (%)</FormLabel>
+                    <FormLabel>{labelMap[key as keyof SubstrateAnalysis]} (%)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.1" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
                     </FormControl>
@@ -311,6 +323,7 @@ const LogFeeding: React.FC = () => {
         destino: (item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A',
         cantidad: item.cantidad,
         unidad: item.unidad,
+        operador: (item as EnrichedAlimentacionRecord).usuario_operador?.nombres ?? 'N/A',
         observaciones: item.observaciones,
     })), [history]);
 
@@ -358,7 +371,7 @@ const LogFeeding: React.FC = () => {
                                 render={({ field }) => (
                                     <FormItem>
                                         <div className="flex items-center justify-between">
-                                            <FormLabel>Destino (Biodigestor)</FormLabel>
+                                            <FormLabel>Destino (biodigestor)</FormLabel>
                                             <button type="button" onClick={() => setIsQuickAddOpen(true)} className="text-primary hover:opacity-80 transition-opacity">
                                                 <PlusCircleIcon className="h-5 w-5" />
                                             </button>
@@ -383,7 +396,7 @@ const LogFeeding: React.FC = () => {
                                     render={({ field }) => (
                                         <FormItem className="w-2/3 flex-grow space-y-0">
                                             <FormControl>
-                                                <Input type="number" step="any" {...field} value={field.value ?? ''} className="rounded-r-none" placeholder="e.g., 5000" onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
+                                                <Input type="number" step="any" {...field} value={field.value ?? ''} className="rounded-r-none" placeholder="ej., 5000.5" onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} />
                                             </FormControl>
                                             <FormMessage className="mt-2" />
                                         </FormItem>
@@ -440,17 +453,27 @@ const LogFeeding: React.FC = () => {
                                          <th className={commonTableClasses.head}>Origen</th>
                                          <th className={commonTableClasses.head}>Destino</th>
                                          <th className={`${commonTableClasses.head} text-right`}>Cantidad</th>
+                                         <th className={commonTableClasses.head}>Operador</th>
+                                         <th className={commonTableClasses.head}>Obs.</th>
                                      </tr>
                                  </thead>
                                  <tbody className="bg-surface divide-y divide-border">
                                     {history.length === 0 ? (
-                                        <tr><td colSpan={4} className="text-center py-4 text-text-secondary">No hay registros de alimentación.</td></tr>
+                                        <tr><td colSpan={6} className="text-center py-4 text-text-secondary">No hay registros de alimentación.</td></tr>
                                     ) : history.map(item => (
                                         <tr key={item.id}>
                                             <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(item.fecha_hora!).toLocaleString('es-AR')}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_origen?.nombre_equipo ?? 'N/A'}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary`}>{(item as EnrichedAlimentacionRecord).equipo_destino?.nombre_equipo ?? 'N/A'}</td>
                                             <td className={`${commonTableClasses.cell} text-text-primary font-medium text-right`}>{item.cantidad} {item.unidad}</td>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>{(item as EnrichedAlimentacionRecord).usuario_operador?.nombres ?? 'N/A'}</td>
+                                            <td className={`${commonTableClasses.cell} text-center`}>
+                                                {item.observaciones && (
+                                                    <div title={item.observaciones}>
+                                                        <ChatBubbleLeftEllipsisIcon className="h-5 w-5 text-text-secondary cursor-pointer" />
+                                                    </div>
+                                                )}
+                                            </td>
                                         </tr>
                                     ))}
                                  </tbody>
