@@ -268,6 +268,8 @@ if (supabaseUrl && supabaseAnonKey) {
     let single = false;
     let maybeSingle = false;
     let selectStr = '*';
+    let currentOperation: 'select' | 'insert' | 'update' | 'delete' = 'select';
+    let operationData: any = null;
 
     const applyJoins = (result: any[]) => {
         if (!selectStr || !selectStr.includes('(')) return result;
@@ -300,31 +302,64 @@ if (supabaseUrl && supabaseAnonKey) {
                  monitoreos_ambientales_detalle: detalles.filter(d => d.monitoreo_id === m.id) || [],
              }));
         }
+        if (tableName === 'checklist_registros' && selectStr.includes('checklist_items')) {
+            const checklistItems = mockDatabase['checklist_items'];
+            return result.map(registro => {
+                const item = checklistItems.find(it => it.id === registro.checklist_item_id);
+                return {
+                    ...registro,
+                    checklist_items: item ? { descripcion_item: item.descripcion_item } : null
+                };
+            });
+        }
         // Add more mock join handlers as needed for other parts of the app
         return result;
     }
 
     const execute = async () => {
+      // This function will now handle all final executions
+      if (currentOperation === 'select') {
         const joinedResult = applyJoins(queryResult);
-        // FIX: Replaced corrupted/incomplete logic with a full implementation that correctly handles single() and maybeSingle() based on Supabase API behavior.
         if ((single || maybeSingle) && joinedResult.length > 1) {
-            return { data: null, error: { message: 'Query returned more than one row', code: 'PGRST116' } };
+          return { data: null, error: { message: 'Query returned more than one row', code: 'PGRST116' } };
         }
         if (single && joinedResult.length !== 1) {
-            return { data: null, error: { message: `Query returned ${joinedResult.length} rows, but single() was called.`, code: 'PGRST116' } };
+          return { data: null, error: { message: `Query returned ${joinedResult.length} rows, but single() was called.`, code: 'PGRST116' } };
         }
         if (maybeSingle) {
-            return { data: joinedResult[0] || null, error: null };
+          return { data: joinedResult[0] || null, error: null };
         }
         if (single) {
-            return { data: joinedResult[0], error: null };
+          return { data: joinedResult[0], error: null };
         }
         return { data: joinedResult, error: null };
+      }
+      if (currentOperation === 'update') {
+        queryResult.forEach(itemToUpdate => {
+          const index = data.findIndex(item => item.id === itemToUpdate.id);
+          if (index > -1) {
+            data[index] = { ...data[index], ...operationData, updated_at: new Date().toISOString() };
+          }
+        });
+        return { data: null, error: null };
+      }
+      if (currentOperation === 'delete') {
+        queryResult.forEach(itemToDelete => {
+          const index = data.findIndex(item => item.id === itemToDelete.id);
+          if (index > -1) {
+            data.splice(index, 1);
+          }
+        });
+        return { data: null, error: null };
+      }
+      return { data: queryResult, error: null }; // Fallback
     };
-
+    
     const builder = {
         select: (str: string) => {
+            currentOperation = 'select';
             selectStr = str;
+            queryResult = [...data];
             return builder;
         },
         insert: (newData: any) => {
@@ -338,7 +373,6 @@ if (supabaseUrl && supabaseAnonKey) {
                 insertedItems.push(newItem);
             });
             
-            // Create a chainable object that supports .select().single()
             const result: any = {
                 data: insertedItems,
                 error: null,
@@ -372,28 +406,15 @@ if (supabaseUrl && supabaseAnonKey) {
             return result;
         },
         update: (newData: any) => {
-            const p = new Promise(resolve => {
-                queryResult.forEach(itemToUpdate => {
-                    const index = data.findIndex(item => item.id === itemToUpdate.id);
-                    if (index > -1) {
-                        data[index] = { ...data[index], ...newData, updated_at: new Date().toISOString() };
-                    }
-                });
-                resolve({ data: null, error: null });
-            });
-            return { then: (onfulfilled: any, onrejected: any) => p.then(onfulfilled, onrejected) };
+            currentOperation = 'update';
+            operationData = newData;
+            queryResult = [...data]; // Start with all data, to be filtered by chained methods
+            return builder;
         },
         delete: () => {
-             const p = new Promise(resolve => {
-                queryResult.forEach(itemToDelete => {
-                    const index = data.findIndex(item => item.id === itemToDelete.id);
-                    if (index > -1) {
-                        data.splice(index, 1);
-                    }
-                });
-                resolve({ data: null, error: null });
-             });
-             return { then: (onfulfilled: any, onrejected: any) => p.then(onfulfilled, onrejected) };
+             currentOperation = 'delete';
+             queryResult = [...data];
+             return builder;
         },
         eq: (column: string, value: any) => {
             queryResult = queryResult.filter(row => row[column] === value);

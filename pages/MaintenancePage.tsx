@@ -10,7 +10,7 @@ import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/Dialog';
 import { useSupabaseData } from '../contexts/SupabaseContext';
-import { PlusCircleIcon, ClipboardDocumentCheckIcon, ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { PlusCircleIcon, ClipboardDocumentCheckIcon, ArrowDownTrayIcon, ChevronDownIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../components/EmptyState';
 import QuickAddModal, { FormField as QuickFormField } from '../components/QuickAddModal.tsx';
 import { useToast } from '../hooks/use-toast.ts';
@@ -21,6 +21,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
+// FIX: Import the `Label` component to resolve 'Cannot find name' error.
+import { Label } from '../components/ui/Label';
 import { cn } from '../lib/utils';
 import { useSortableData } from '../hooks/useSortableData';
 import { SortableHeader } from '../components/ui/SortableHeader';
@@ -30,6 +32,8 @@ type ChecklistItem = Database['public']['Tables']['checklist_items']['Row'];
 interface EnrichedChecklistItem extends ChecklistItem {
     checked: boolean;
     registro_id?: number;
+    observation?: string | null;
+    isPendingFromPrevious: boolean;
 }
 
 type MantenimientoEvento = Database['public']['Tables']['mantenimiento_eventos']['Row'];
@@ -61,37 +65,120 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
     </button>
 );
 
+const ObservationModal: React.FC<{
+    item: EnrichedChecklistItem | null;
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (itemId: ChecklistItemId, observation: string) => void;
+  }> = ({ item, isOpen, onClose, onSave }) => {
+    const [text, setText] = useState('');
+    useEffect(() => {
+        if(item) setText(item.observation || '');
+    }, [item]);
+
+    if (!item) return null;
+
+    const handleSave = () => {
+        onSave(item.id as ChecklistItemId, text);
+        onClose();
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Observación para: {item.descripcion_item}</DialogTitle>
+                </DialogHeader>
+                <div className="p-6">
+                    <Label htmlFor="observation-text">Añadir comentario sobre la verificación:</Label>
+                    <Textarea id="observation-text" value={text} onChange={(e) => setText(e.target.value)} rows={4} className="mt-2" />
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                    <Button onClick={handleSave}>Guardar Observación</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
 const Checklist: React.FC = () => {
     const [items, setItems] = useState<EnrichedChecklistItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { subsistemas } = useSupabaseData();
+    const { toast } = useToast();
+    const [isObservationModalOpen, setIsObservationModalOpen] = useState(false);
+    const [currentItemForObservation, setCurrentItemForObservation] = useState<EnrichedChecklistItem | null>(null);
+
+    const getShiftTimestamps = useCallback((forDate = new Date()) => {
+        const year = forDate.getFullYear();
+        const month = forDate.getMonth();
+        const day = forDate.getDate();
+        const hours = forDate.getHours();
+    
+        let start, end, prev_start, prev_end;
+    
+        if (hours >= 6 && hours < 14) { // Shift 1: 6am to 2pm
+            start = new Date(year, month, day, 6, 0, 0);
+            end = new Date(year, month, day, 13, 59, 59, 999);
+            const prevShiftStart = new Date(start.getTime());
+            prevShiftStart.setHours(prevShiftStart.getHours() - 8);
+            prev_start = prevShiftStart;
+            prev_end = new Date(start.getTime() - 1);
+        } else if (hours >= 14 && hours < 22) { // Shift 2: 2pm to 10pm
+            start = new Date(year, month, day, 14, 0, 0);
+            end = new Date(year, month, day, 21, 59, 59, 999);
+            prev_start = new Date(year, month, day, 6, 0, 0);
+            prev_end = new Date(year, month, day, 13, 59, 59, 999);
+        } else { // Shift 3: 10pm to 6am (crosses midnight)
+            if (hours >= 22) { // Today 10pm onwards
+                start = new Date(year, month, day, 22, 0, 0);
+                const nextDay = new Date(start.getTime() + 8 * 60 * 60 * 1000);
+                end = new Date(nextDay.getFullYear(), nextDay.getMonth(), nextDay.getDate(), 5, 59, 59, 999);
+            } else { // Tomorrow before 6am
+                const prevDay = new Date(forDate);
+                prevDay.setDate(prevDay.getDate() - 1);
+                start = new Date(prevDay.getFullYear(), prevDay.getMonth(), prevDay.getDate(), 22, 0, 0);
+                end = new Date(year, month, day, 5, 59, 59, 999);
+            }
+            prev_start = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 14, 0, 0);
+            prev_end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 21, 59, 59, 999);
+        }
+    
+        return {
+            current: { start: start.toISOString(), end: end.toISOString() },
+            previous: { start: prev_start.toISOString(), end: prev_end.toISOString() }
+        };
+    }, []);
 
     const fetchChecklistData = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            // Get today's date range
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
+            const { current, previous } = getShiftTimestamps();
 
-            // Fetch all checklist items and today's records in parallel
-            const [itemsRes, recordsRes] = await Promise.all([
+            const [itemsRes, currentRecordsRes, prevRecordsRes] = await Promise.all([
                 supabase.from('checklist_items').select('*').order('numero_item'),
-                supabase.from('checklist_registros').select('id, checklist_item_id').gte('fecha_verificacion', today.toISOString()).lt('fecha_verificacion', tomorrow.toISOString()),
+                supabase.from('checklist_registros').select('*').gte('fecha_verificacion', current.start).lte('fecha_verificacion', current.end),
+                supabase.from('checklist_registros').select('checklist_item_id').gte('fecha_verificacion', previous.start).lte('fecha_verificacion', previous.end)
             ]);
 
             if (itemsRes.error) throw new Error(`Error fetching items: ${itemsRes.error.message}`);
-            if (recordsRes.error) throw new Error(`Error fetching records: ${recordsRes.error.message}`);
+            if (currentRecordsRes.error) throw new Error(`Error fetching current records: ${currentRecordsRes.error.message}`);
+            if (prevRecordsRes.error) throw new Error(`Error fetching previous records: ${prevRecordsRes.error.message}`);
 
-            const checkedItemIds = new Map(recordsRes.data.map(r => [r.checklist_item_id, r.id]));
+            const checkedCurrentShift = new Map(currentRecordsRes.data.map(r => [r.checklist_item_id, { id: r.id, observation: r.observaciones }]));
+            const checkedPreviousShiftIds = new Set(prevRecordsRes.data.map(r => r.checklist_item_id));
+            const allItemIds = new Set(itemsRes.data.map(item => item.id));
+            const pendingFromPreviousIds = new Set([...allItemIds].filter(id => !checkedPreviousShiftIds.has(id)));
 
             const enrichedItems = itemsRes.data.map(item => ({
                 ...item,
-                checked: checkedItemIds.has(item.id),
-                registro_id: checkedItemIds.get(item.id),
+                checked: checkedCurrentShift.has(item.id),
+                registro_id: checkedCurrentShift.get(item.id)?.id,
+                observation: checkedCurrentShift.get(item.id)?.observation,
+                isPendingFromPrevious: !checkedCurrentShift.has(item.id) && pendingFromPreviousIds.has(item.id)
             }));
             
             setItems(enrichedItems);
@@ -100,7 +187,7 @@ const Checklist: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [getShiftTimestamps]);
 
     useEffect(() => {
         fetchChecklistData();
@@ -120,47 +207,49 @@ const Checklist: React.FC = () => {
 
     const subsistemaOrder = useMemo(() => {
         if (!subsistemas.length || Object.keys(groupedItems).length === 0) return Object.keys(groupedItems).map(Number);
-        // Create a sorted list of subsystem IDs present in the checklist
         const orderedIds = subsistemas
             .filter(s => groupedItems[s.id])
             .sort((a, b) => (a.orden_visualizacion || 99) - (b.orden_visualizacion || 99))
             .map(s => s.id);
         
-        // Add any items without a subsystem at the end
         if (groupedItems[0]) {
             orderedIds.push(0);
         }
         return orderedIds;
     }, [groupedItems, subsistemas]);
 
-    const handleVerify = async (itemId: ChecklistItemId) => {
-        // Optimistically update the UI
-        setItems(prevItems => prevItems.map(item => 
-            item.id === itemId ? { ...item, checked: true } : item,
-        ));
+    const handleOpenObservationModal = (item: EnrichedChecklistItem) => {
+        setCurrentItemForObservation(item);
+        setIsObservationModalOpen(true);
+    };
+
+    const saveVerification = async (itemId: ChecklistItemId, observationText?: string) => {
+        const itemToUpdate = items.find(i => i.id === itemId);
+        if (!itemToUpdate) return;
         
         try {
-            const { error } = await supabase.from('checklist_registros').insert({
-                checklist_item_id: itemId,
-                usuario_operador_id: 1, // Hardcoded user for demo
-                fecha_verificacion: new Date().toISOString(),
-                estado_verificacion: 'OK',
-            });
-
-            if (error) {
-                // Revert UI on error
-                setItems(prevItems => prevItems.map(item => 
-                    item.id === itemId ? { ...item, checked: false } : item,
-                ));
-                alert(`Error al guardar la verificación: ${error.message}`);
+            if (itemToUpdate.checked && itemToUpdate.registro_id) {
+                // Already checked, just updating observation
+                const { error } = await supabase.from('checklist_registros').update({ observaciones: observationText }).eq('id', itemToUpdate.registro_id);
+                if (error) throw error;
             } else {
-                // Optionally refresh all data to get the new record ID, or just live with the optimistic state
-                fetchChecklistData();
+                // New verification for this shift
+                const { error } = await supabase.from('checklist_registros').insert({
+                    checklist_item_id: itemId,
+                    usuario_operador_id: 1, // Hardcoded user for demo
+                    fecha_verificacion: new Date().toISOString(),
+                    estado_verificacion: 'OK',
+                    observaciones: observationText,
+                });
+                if (error) throw error;
             }
+            toast({ title: 'Éxito', description: 'Checklist actualizado.' });
+            await fetchChecklistData();
         } catch(err: any) {
-             alert(`Error: ${err.message}`);
+             toast({ title: 'Error', description: `Error al guardar: ${err.message}`, variant: 'destructive' });
         }
     };
+
 
     if (loading) {
         return <Card><CardContent className="pt-6"><p className="text-center text-text-secondary">Cargando checklist...</p></CardContent></Card>
@@ -173,7 +262,7 @@ const Checklist: React.FC = () => {
     return (
         <Card>
             <CardContent className="pt-6">
-                <h2 className="text-lg font-semibold text-text-primary mb-4">Checklist Diario de Equipos</h2>
+                <h2 className="text-lg font-semibold text-text-primary mb-4">Checklist de Turno</h2>
                 {items.length === 0 ? (
                     <EmptyState
                         icon={<ClipboardDocumentCheckIcon className="mx-auto h-12 w-12" />}
@@ -195,16 +284,33 @@ const Checklist: React.FC = () => {
                                     <ul className="space-y-3">
                                         {checklistItems.map(item => (
                                             <li key={item.id} className="flex items-center justify-between p-3 bg-background rounded-md">
-                                                <span className={`flex-grow ${item.checked ? 'text-text-secondary line-through' : 'text-text-primary'}`}>
-                                                    {item.numero_item} - {item.descripcion_item}
-                                                </span>
-                                                <button 
-                                                    className={`ml-4 px-3 py-1 text-sm rounded-full transition-colors duration-200 ${item.checked ? 'bg-success-bg text-success' : 'bg-primary/20 text-primary hover:bg-primary/30'}`}
-                                                    onClick={() => handleVerify(item.id as ChecklistItemId)}
-                                                    disabled={item.checked}
-                                                >
-                                                    {item.checked ? 'Verificado' : 'Verificar'}
-                                                </button>
+                                                <div className="flex-grow">
+                                                    {item.isPendingFromPrevious && (
+                                                        <span className="block text-xs font-bold text-error">PENDIENTE TURNO ANTERIOR</span>
+                                                    )}
+                                                    <span className={` ${item.checked ? 'text-text-secondary line-through' : 'text-text-primary'}`}>
+                                                        {item.numero_item} - {item.descripcion_item}
+                                                    </span>
+                                                </div>
+                                                <div className="ml-4 flex items-center space-x-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleOpenObservationModal(item)}
+                                                        className="text-text-secondary hover:text-primary"
+                                                        title={item.observation ? `Ver/Editar Observación: "${item.observation}"` : "Añadir Observación"}
+                                                    >
+                                                        <ChatBubbleLeftEllipsisIcon className={cn("h-5 w-5", item.observation && "text-primary")} />
+                                                    </Button>
+                                                    <Button 
+                                                        size="sm"
+                                                        className={`w-24 ${item.checked ? 'bg-success-bg text-success' : 'bg-primary/20 text-primary hover:bg-primary/30'}`}
+                                                        onClick={() => saveVerification(item.id as ChecklistItemId)}
+                                                        disabled={item.checked}
+                                                    >
+                                                        {item.checked ? 'Verificado' : 'Verificar'}
+                                                    </Button>
+                                                </div>
                                             </li>
                                         ))}
                                     </ul>
@@ -213,6 +319,12 @@ const Checklist: React.FC = () => {
                         })}
                     </div>
                 )}
+                 <ObservationModal 
+                    item={currentItemForObservation} 
+                    isOpen={isObservationModalOpen}
+                    onClose={() => setIsObservationModalOpen(false)}
+                    onSave={saveVerification}
+                />
             </CardContent>
         </Card>
     );
@@ -634,7 +746,7 @@ const MaintenancePage: React.FC = () => {
         <div className="mb-4 border-b border-border">
             <nav className="-mb-px flex space-x-4" aria-label="Tabs">
             <TabButton active={activeTab === 'checklist'} onClick={() => setActiveTab('checklist')}>
-                Checklist de Equipos
+                Checklist de Turno
             </TabButton>
             <TabButton active={activeTab === 'tasks'} onClick={() => setActiveTab('tasks')}>
                 Tareas Asignadas

@@ -8,7 +8,7 @@ import { Select } from '../components/ui/Select';
 import { Label } from '../components/ui/Label';
 import { Button } from '../components/ui/Button';
 import Page from '../components/Page';
-import { BoltIcon, FireIcon, BeakerIcon, AdjustmentsHorizontalIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon, ArrowUpIcon, ArrowDownIcon, Cog6ToothIcon, WrenchScrewdriverIcon, AcademicCapIcon, ExclamationCircleIcon, LightBulbIcon, SunIcon } from '@heroicons/react/24/outline';
+import { BoltIcon, FireIcon, BeakerIcon, AdjustmentsHorizontalIcon, CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon, ArrowUpIcon, ArrowDownIcon, Cog6ToothIcon, WrenchScrewdriverIcon, AcademicCapIcon, ExclamationCircleIcon, LightBulbIcon, SunIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline';
 import { supabase } from '../services/supabaseClient';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { es } from 'date-fns/locale/es';
@@ -35,7 +35,7 @@ const fetchDashboardData = async (selectedDate: string, biodigesterId: number) =
         currentFosTacRes, prevFosTacRes,
         currentGasRes, prevGasRes,
         pendingMaintenanceRes, completedMaintenanceRes,
-        chpChangesRes
+        chpChangesRes, recentObservationsRes
     ] = await Promise.all([
         // Plant KPIs
         supabase.from('energia').select('*').eq('fecha', currentDateStr).maybeSingle(),
@@ -48,12 +48,13 @@ const fetchDashboardData = async (selectedDate: string, biodigesterId: number) =
         // Summary Cards Data
         supabase.from('mantenimiento_eventos').select('*, equipos(nombre_equipo)').is('fecha_fin', null).order('fecha_planificada', { ascending: true }).limit(5),
         supabase.from('mantenimiento_eventos').select('*, equipos(nombre_equipo)').not('fecha_fin', 'is', null).order('fecha_fin', { ascending: false }).limit(5),
-        supabase.from('cambios_potencia_chp').select('*').order('fecha_hora', { ascending: false }).limit(5)
+        supabase.from('cambios_potencia_chp').select('*').order('fecha_hora', { ascending: false }).limit(5),
+        supabase.from('checklist_registros').select('id, observaciones, fecha_verificacion, checklist_items ( descripcion_item )').not('observaciones', 'is', null).order('fecha_verificacion', { ascending: false }).limit(5)
     ]);
 
     const errors: string[] = [
       currentEnergiaRes.error, prevEnergiaRes.error, currentFosTacRes.error, prevFosTacRes.error,
-      currentGasRes.error, prevGasRes.error, pendingMaintenanceRes.error, completedMaintenanceRes.error, chpChangesRes.error
+      currentGasRes.error, prevGasRes.error, pendingMaintenanceRes.error, completedMaintenanceRes.error, chpChangesRes.error, recentObservationsRes.error
     ].filter(Boolean).map(e => e!.message);
     if (errors.length > 0) throw new Error(errors.join('; '));
 
@@ -102,7 +103,8 @@ const fetchDashboardData = async (selectedDate: string, biodigesterId: number) =
         kpiData, 
         trendData,
         maintenance: { pending: pendingMaintenanceRes.data, completed: completedMaintenanceRes.data },
-        chpChanges: chpChangesRes.data 
+        chpChanges: chpChangesRes.data,
+        recentObservations: recentObservationsRes.data
     };
 };
 
@@ -238,6 +240,29 @@ const ChpSummaryCard: React.FC<{ changes: any[] }> = ({ changes }) => (
     </Card>
 );
 
+const ShiftObservationsCard: React.FC<{ observations: any[] }> = ({ observations }) => {
+    return (
+        <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><ChatBubbleLeftEllipsisIcon className="h-5 w-5 text-primary" /> Novedades del Último Turno</CardTitle></CardHeader>
+            <CardContent>
+                {observations.length > 0 ? (
+                    <ul className="space-y-3">
+                        {observations.map(obs => (
+                            <li key={obs.id} className="text-sm p-2 bg-background rounded-md">
+                                <p className="font-semibold text-text-primary">
+                                  {(obs as any).checklist_items?.descripcion_item || 'Observación General'}
+                                </p>
+                                <p className="italic text-text-secondary">"{obs.observaciones}"</p>
+                                <p className="text-xs text-right text-text-secondary/80 mt-1">{new Date(obs.fecha_verificacion).toLocaleString('es-AR')}</p>
+                            </li>
+                        ))}
+                    </ul>
+                ) : <p className="text-sm text-text-secondary">No hay observaciones recientes en el checklist.</p>}
+            </CardContent>
+        </Card>
+    );
+};
+
 const HomePage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const { equipos } = useSupabaseData();
@@ -266,7 +291,7 @@ const HomePage: React.FC = () => {
     }
   }, [data, evaluateAlerts]);
 
-  const { kpiData, trendData, maintenance, chpChanges } = data || {};
+  const { kpiData, trendData, maintenance, chpChanges, recentObservations } = data || {};
 
   const kpiDefinitions = useMemo<Record<string, KpiCardProps>>(() => ({
     generacion: { title: 'Generación Eléctrica', value: kpiData?.generacion || '...', unit: 'MWh', trend: trendData?.generacion ?? 0, icon: <BoltIcon className="h-6 w-6" />, to: '/energy' },
@@ -321,6 +346,8 @@ const HomePage: React.FC = () => {
                  <Button variant="ghost" size="icon" onClick={() => setIsCustomizeModalOpen(true)} className="flex-shrink-0 mt-auto" aria-label="Personalizar KPIs"><Cog6ToothIcon className="h-6 w-6 text-text-secondary" /></Button>
             </div>
         </div>
+
+        <ShiftObservationsCard observations={recentObservations || []} />
 
         <div>
             <h2 className="text-lg font-semibold text-text-primary mb-2">Indicadores de Planta</h2>
