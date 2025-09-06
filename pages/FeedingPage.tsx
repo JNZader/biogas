@@ -84,14 +84,16 @@ const analysisSchema = z.object({
   volatileSolids: z.number().nonnegative("Debe ser un número no negativo.").max(100, "No puede exceder 100%"),
 });
 
+// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
 const logFeedingSchema = z.object({
-    source: z.string().min(1, "Este campo es requerido."),
-    destination: z.string().min(1, "Este campo es requerido."),
-    // FIX: The `invalid_type_error` property is not valid for `z.coerce.number()`, which was causing Zod to incorrectly infer the output type as `unknown` instead of `number`. This led to a cascade of type errors in `react-hook-form`. Removing the invalid property allows Zod to infer the correct type, resolving all related errors.
-    quantity: z.coerce.number().positive({ message: "La cantidad debe ser mayor a cero." }),
+    source: z.string().min(1, "Debe seleccionar una fuente."),
+    destination: z.string().min(1, "Debe seleccionar un destino."),
+    quantity: z.coerce.number({invalid_type_error: "Debe ingresar un número."}).positive("La cantidad debe ser mayor a cero."),
     unit: z.enum(['kg', 'm³']),
     observations: z.string().optional(),
 });
+
+type LogFeedingFormData = z.infer<typeof logFeedingSchema>;
 
 
 // --- Co-located API Logic ---
@@ -286,7 +288,7 @@ const LogFeeding: React.FC = () => {
 
     const { items: sortedHistory, requestSort, sortConfig } = useSortableData(displayHistory, { key: 'fecha_hora', direction: 'descending' });
 
-    const form = useForm<z.infer<typeof logFeedingSchema>>({
+    const form = useForm<LogFeedingFormData>({
         resolver: zodResolver(logFeedingSchema),
         defaultValues: {
             source: "",
@@ -321,7 +323,7 @@ const LogFeeding: React.FC = () => {
         { name: 'codigo_equipo', label: 'Código / Tag', type: 'text' },
     ];
 
-    function onSubmit(data: z.infer<typeof logFeedingSchema>) {
+    function onSubmit(data: LogFeedingFormData) {
         mutation.mutate(data);
     }
 

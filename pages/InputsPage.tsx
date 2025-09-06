@@ -20,15 +20,15 @@ import { SortableHeader } from '../components/ui/SortableHeader';
 
 
 // --- Co-located Zod Schema ---
+// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
 const ingresoSchema = z.object({
-  transportista_id: z.string().min(1, "Requerido"),
-  camion_id: z.string().min(1, "Requerido"),
-  remito: z.string().min(1, "Requerido"),
-  provider: z.string().min(1, "Requerido"),
-  substrate: z.string().min(1, "Requerido"),
-  // FIX: The `invalid_type_error` property is not valid for `z.coerce.number()`, which was causing Zod to incorrectly infer the output type as `unknown` instead of `number`. This led to a cascade of type errors in `react-hook-form`. Removing the invalid property allows Zod to infer the correct type, resolving all related errors.
-  quantity: z.coerce.number().positive({ message: "La cantidad debe ser mayor a cero." }),
-  location: z.string().min(1, "Requerido"),
+  transportista_id: z.string().min(1, "Debe seleccionar un transportista."),
+  camion_id: z.string().min(1, "Debe seleccionar un camión."),
+  remito: z.string().min(1, "El número de remito es requerido."),
+  provider: z.string().min(1, "Debe seleccionar un proveedor."),
+  substrate: z.string().min(1, "Debe seleccionar un sustrato."),
+  quantity: z.coerce.number({invalid_type_error: "Debe ingresar un número."}).positive("La cantidad debe ser mayor a cero."),
+  location: z.string().min(1, "Debe seleccionar un lugar de descarga."),
 });
 type IngresoFormData = z.infer<typeof ingresoSchema>;
 

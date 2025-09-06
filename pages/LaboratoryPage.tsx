@@ -29,18 +29,19 @@ type AnalisisLaboratorioInsert = Database['public']['Tables']['analisis_laborato
 type AnalisisDetalleInsert = Database['public']['Tables']['analisis_laboratorio_detalle']['Insert'];
 
 // --- Co-located Zod Schema ---
+// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
 const labAnalysisSchema = z.object({
     date: z.string().min(1, "La fecha es requerida."),
     time: z.string().min(1, "La hora es requerida."),
     detalle_ingreso_sustrato_id: z.string().optional(),
     equipo_asociado_id: z.string().optional(),
     sampleType: z.string().min(1, "El tipo de muestra es requerido."),
-    sampleWeight: z.number().nonnegative().optional(),
-    analysisTime: z.number().nonnegative().optional(),
-    sampleTemp: z.number().optional(),
+    sampleWeight: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El peso no puede ser negativo.").optional(),
+    analysisTime: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El tiempo no puede ser negativo.").optional(),
+    sampleTemp: z.coerce.number({invalid_type_error: "Debe ser un número."}).optional(),
     observations: z.string().optional(),
-    ph: z.number().min(0).max(14).optional(),
-    totalSolids: z.number().min(0).max(100).optional(),
+    ph: z.coerce.number({invalid_type_error: "Debe ser un número."}).min(0).max(14).optional(),
+    totalSolids: z.coerce.number({invalid_type_error: "Debe ser un número."}).min(0, "No puede ser negativo.").max(100, "No puede ser mayor a 100.").optional(),
 });
 type LabAnalysisFormData = z.infer<typeof labAnalysisSchema>;
 

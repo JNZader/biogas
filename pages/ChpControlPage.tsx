@@ -8,7 +8,6 @@ import Page from '../components/Page';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Label } from '../components/ui/Label';
 import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/Form';
@@ -16,7 +15,7 @@ import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
-import { ArrowDownTrayIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ChevronDownIcon, ChatBubbleLeftEllipsisIcon } from '@heroicons/react/24/outline';
 import { exportToCsv, exportToPdf, exportToXlsx } from '../lib/utils';
 import { PlantaId } from '../types/branded';
 import { cn } from '../lib/utils';
@@ -24,28 +23,32 @@ import { useSortableData } from '../hooks/useSortableData';
 import { SortableHeader } from '../components/ui/SortableHeader';
 
 type ChpChangeRecord = Database['public']['Tables']['cambios_potencia_chp']['Row'];
+interface EnrichedChpChangeRecord extends ChpChangeRecord {
+    usuarios?: { nombres: string } | null;
+}
+
 
 // --- Co-located Zod Schema ---
 const chpSchema = z.object({
   date: z.string().min(1, "La fecha es requerida."),
   time: z.string().min(1, "La hora es requerida."),
-  initial_power: z.number().nonnegative("Debe ser un valor no negativo."),
-  programmed_power: z.number().nonnegative("Debe ser un valor no negativo."),
+  initial_power: z.coerce.number({ invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
+  programmed_power: z.coerce.number({ invalid_type_error: "Debe ser un número."}).nonnegative("El valor no puede ser negativo."),
   reason: z.string().min(1, "El motivo es requerido."),
   observations: z.string().optional(),
 });
 type ChpFormData = z.infer<typeof chpSchema>;
 
 // --- Co-located API Logic ---
-const fetchChpHistory = async (plantaId: PlantaId): Promise<ChpChangeRecord[]> => {
+const fetchChpHistory = async (plantaId: PlantaId): Promise<EnrichedChpChangeRecord[]> => {
     const { data, error } = await supabase
         .from('cambios_potencia_chp')
-        .select('*')
+        .select('*, usuarios(nombres)')
         .eq('planta_id', plantaId)
         .order('fecha_hora', { ascending: false })
         .limit(15);
     if (error) throw error;
-    return data || [];
+    return (data as EnrichedChpChangeRecord[]) || [];
 };
 
 const createChpChange = async (newData: Omit<ChpChangeRecord, 'id' | 'created_at' | 'updated_at'>) => {
@@ -118,14 +121,22 @@ const ChpControlPage: React.FC = () => {
         enabled: !!activePlanta,
     });
     
-    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(history, { key: 'fecha_hora', direction: 'descending' });
+    const displayHistory = useMemo(() => history.map(item => ({
+        ...item,
+        operador_nombre: item.usuarios?.nombres ?? 'N/A',
+    })), [history]);
+
+    const { items: sortedHistory, requestSort, sortConfig } = useSortableData(displayHistory, { key: 'fecha_hora', direction: 'descending' });
 
     const mutation = useMutation({
         mutationFn: createChpChange,
         onSuccess: () => {
             toast({ title: 'Éxito', description: 'Cambio de potencia guardado con éxito.' });
             queryClient.invalidateQueries({ queryKey: ['chpHistory'] });
-            form.reset();
+            form.reset({
+                 date: new Date().toISOString().split('T')[0],
+                 time: new Date().toTimeString().slice(0, 5),
+            });
         },
         onError: (err: Error) => {
             toast({ title: 'Error', description: `Error al guardar: ${err.message}`, variant: 'destructive' });
@@ -172,6 +183,7 @@ const ChpControlPage: React.FC = () => {
         potencia_inicial_kw: item.potencia_inicial_kw,
         potencia_programada_kw: item.potencia_programada_kw,
         motivo: item.motivo_cambio,
+        operador: item.operador_nombre,
         observaciones: item.observaciones,
     }));
 
@@ -197,10 +209,10 @@ const ChpControlPage: React.FC = () => {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormField control={form.control} name="initial_power" render={({ field }) => (
-                                    <FormItem><FormLabel>Potencia Inicial (kW)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Potencia Inicial (kW)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
                                 )} />
                                 <FormField control={form.control} name="programmed_power" render={({ field }) => (
-                                    <FormItem><FormLabel>Potencia Programada (kW)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
+                                    <FormItem><FormLabel>Potencia Programada (kW)</FormLabel><FormControl><Input type="number" min="0" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)} /></FormControl><FormMessage /></FormItem>
                                 )} />
                             </div>
                             <FormField control={form.control} name="reason" render={({ field }) => (
@@ -216,7 +228,7 @@ const ChpControlPage: React.FC = () => {
                                 </FormItem>
                             )} />
                             <FormField control={form.control} name="observations" render={({ field }) => (
-                                <FormItem><FormLabel>Observaciones</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Observaciones (Opcional)</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>
                             )} />
                             <div className="pt-4">
                                 <Button type="submit" variant="default" isLoading={mutation.isPending}>Guardar Cambio</Button>
@@ -243,9 +255,11 @@ const ChpControlPage: React.FC = () => {
                                 <thead className="bg-background">
                                     <tr>
                                         <SortableHeader columnKey="fecha_hora" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
-                                        <SortableHeader columnKey="potencia_inicial_kw" title="Potencia Inicial (kW)" sortConfig={sortConfig} onSort={requestSort} />
-                                        <SortableHeader columnKey="potencia_programada_kw" title="Potencia Programada (kW)" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="potencia_inicial_kw" title="Pot. Inicial (kW)" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="potencia_programada_kw" title="Pot. Programada (kW)" sortConfig={sortConfig} onSort={requestSort} />
                                         <SortableHeader columnKey="motivo_cambio" title="Motivo" sortConfig={sortConfig} onSort={requestSort} />
+                                        <SortableHeader columnKey="operador_nombre" title="Operador" sortConfig={sortConfig} onSort={requestSort} />
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Obs.</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-surface divide-y divide-border">
@@ -262,6 +276,16 @@ const ChpControlPage: React.FC = () => {
                                             </td>
                                             <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>
                                                 {item.motivo_cambio}
+                                            </td>
+                                            <td className={`${commonTableClasses.cell} text-text-secondary`}>
+                                                {item.operador_nombre}
+                                            </td>
+                                            <td className={`${commonTableClasses.cell} text-center`}>
+                                                {item.observaciones && (
+                                                    <div title={item.observaciones}>
+                                                        <ChatBubbleLeftEllipsisIcon className="h-5 w-5 text-text-secondary cursor-pointer" />
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}

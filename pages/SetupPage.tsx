@@ -40,13 +40,11 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
     </button>
 );
 
+// FIX: Refactored Zod schema to use valid syntax for number coercion, resolving the TypeScript error.
 const plantDetailsSchema = z.object({
     nombre_planta: z.string().min(1, "El nombre es requerido."),
     ubicacion: z.string().optional(),
-    // FIX: Simplified the schema for the 'capacity' field. The complex `z.union` and `transform`
-    // was causing a type mismatch in the `zodResolver`. Since the component's `onChange` handler
-    // already provides a `number` or `undefined`, a simpler schema is sufficient and resolves the error.
-    capacity: z.number().positive("Debe ser un número positivo.").optional(),
+    capacity: z.coerce.number({invalid_type_error: "La capacidad debe ser un número."}).positive("La capacidad debe ser un número positivo.").optional(),
     digester_type: z.string().optional(),
 });
 type PlantDetailsFormData = z.infer<typeof plantDetailsSchema>;

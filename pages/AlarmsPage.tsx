@@ -51,10 +51,11 @@ interface AlarmDisplayItem {
 }
 
 // --- Co-located Zod Schema ---
+// FIX: Refactored Zod schema to use z.coerce.number() for number inputs, resolving validation errors.
 const alertRuleSchema = z.object({
   parameter: z.enum(['fosTac', 'ch4']),
   condition: z.enum(['gt', 'lt', 'eq']),
-  value: z.number().positive("El valor debe ser positivo."),
+  value: z.coerce.number({invalid_type_error: "Debe ser un número." }).positive("El valor debe ser positivo."),
   severity: z.enum(['info', 'warning', 'critical']),
 });
 type AlertRuleFormData = z.infer<typeof alertRuleSchema>;
@@ -279,146 +280,125 @@ const AlarmsPage: React.FC = () => {
             isResolved: false,
             isCustom: true,
         }));
-
-        return [...normalizedCustomAlerts, ...normalizedSystemAlarms];
+        
+        return [...normalizedSystemAlarms, ...normalizedCustomAlerts];
     }, [systemAlarms, triggeredAlerts]);
 
-    // Filter the normalized list
     const filteredAlarms = useMemo(() => {
-        let filtered = allAlarms;
-
-        if (severityFilter !== 'all') {
-            filtered = filtered.filter(a => a.severity === severityFilter);
-        }
-        if (statusFilter !== 'all') {
-            filtered = filtered.filter(a => (statusFilter === 'resolved' ? a.isResolved : !a.isResolved));
-        }
-        
-        return filtered;
+        return allAlarms.filter(alarm => {
+            const severityMatch = severityFilter === 'all' || alarm.severity === severityFilter;
+            const statusMatch = statusFilter === 'all' || (statusFilter === 'resolved' ? alarm.isResolved : !alarm.isResolved);
+            return severityMatch && statusMatch;
+        });
     }, [allAlarms, severityFilter, statusFilter]);
-    
-    // Sort the filtered list
-    const { items: sortedAlarms, requestSort, sortConfig } = useSortableData<AlarmDisplayItem>(filteredAlarms, { key: 'timestamp', direction: 'descending' });
 
+    const { items: sortedAlarms, requestSort, sortConfig } = useSortableData(filteredAlarms, { key: 'timestamp', direction: 'descending' });
+
+    const getSeverityBadgeClass = useCallback((severity: Severity) => {
+        switch (severity) {
+            case 'critical': return 'bg-error-bg text-error';
+            case 'warning': return 'bg-warning-bg text-warning';
+            default: return 'bg-info-bg text-info';
+        }
+    }, []);
 
     const handleCreateTask = (alarm: AlarmDisplayItem) => {
         navigate({
             to: '/maintenance',
             state: {
                 prefillTask: {
-                    equipo_id: alarm.equipoId,
-                    descripcion_problema: `Alarma: ${alarm.alarmType} - ${alarm.description || 'Revisar equipo.'}`
+                    descripcion_problema: `Basado en la alarma: ${alarm.alarmType} - ${alarm.description}`,
+                    equipo_id: alarm.equipoId
                 }
-            } as any
+            }
         });
     };
-
-    const getSeverityBadgeClass = (severity: Severity) => ({
-        'critical': 'bg-error-bg text-error',
-        'warning': 'bg-warning-bg text-warning',
-        'info': 'bg-background text-text-secondary',
-    }[severity]);
-
-    const dataToExport = useMemo(() => sortedAlarms.map(alarm => ({
-        fecha_hora: new Date(alarm.timestamp).toLocaleString('es-AR'),
-        tipo_alarma: alarm.alarmType,
-        descripcion: alarm.description,
-        severidad: alarm.severity,
-        estado: alarm.isResolved ? 'Resuelta' : 'Pendiente',
-        origen: alarm.isCustom ? 'Personalizada' : 'Sistema',
+    
+    const dataToExport = useMemo(() => sortedAlarms.map(item => ({
+        Fecha: new Date(item.timestamp).toLocaleString('es-AR'),
+        Tipo: item.alarmType,
+        Severidad: item.severity.toUpperCase(),
+        Descripción: item.description,
+        Estado: item.isResolved ? 'Resuelta' : 'Activa',
     })), [sortedAlarms]);
 
+    const commonTableClasses = {
+        cell: "px-4 py-3 whitespace-nowrap text-sm",
+    };
 
-    if (error) {
-        return <Page><Card><CardContent className="pt-6 text-error">Error al Cargar Alarmas: {error.message}</CardContent></Card></Page>;
+    if (isLoading) {
+        return <Page><Card><CardContent className="pt-6"><p className="text-center text-text-secondary">Cargando alarmas...</p></CardContent></Card></Page>;
     }
 
     return (
         <Page className="space-y-6">
             <CustomAlertsConfig />
-
+            
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Historial de Alarmas</CardTitle>
-                    <ExportButton data={dataToExport} filename="historial_alarmas" disabled={sortedAlarms.length === 0} />
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="severity-filter">Filtrar por Severidad</Label>
-                            <Select id="severity-filter" value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}>
-                                <option value="all">Todas</option>
-                                <option value="critical">Crítica</option>
-                                <option value="warning">Advertencia</option>
-                                <option value="info">Informativa</option>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label htmlFor="status-filter">Filtrar por Estado</Label>
-                            <Select id="status-filter" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                                <option value="all">Todos</option>
-                                <option value="resolved">Resuelta</option>
-                                <option value="pending">Pendiente</option>
-                            </Select>
+                <CardHeader>
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                        <CardTitle>Historial de Alarmas</CardTitle>
+                        <div className="flex items-center gap-4">
+                             <div>
+                                <Label htmlFor="severity-filter">Severidad</Label>
+                                <Select id="severity-filter" value={severityFilter} onChange={e => setSeverityFilter(e.target.value)}>
+                                    <option value="all">Todas</option>
+                                    <option value="critical">Crítica</option>
+                                    <option value="warning">Advertencia</option>
+                                    <option value="info">Info</option>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label htmlFor="status-filter">Estado</Label>
+                                <Select id="status-filter" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                                    <option value="all">Todos</option>
+                                    <option value="active">Activas</option>
+                                    <option value="resolved">Resueltas</option>
+                                </Select>
+                            </div>
+                            <ExportButton data={dataToExport} filename="historial_alarmas" disabled={sortedAlarms.length === 0} />
                         </div>
                     </div>
-
-                    {isLoading ? (
-                        <p className="text-center text-text-secondary py-10">Cargando historial...</p>
-                    ) : sortedAlarms.length === 0 ? (
+                </CardHeader>
+                <CardContent>
+                    {error && <p className="text-center text-error mb-4">{error}</p>}
+                    {sortedAlarms.length === 0 ? (
                         <EmptyState
                             icon={<BellAlertIcon className="mx-auto h-12 w-12" />}
                             title="Sin Alarmas"
-                            message={allAlarms.length === 0 ? "No se han registrado alarmas." : "No se encontraron alarmas que coincidan con los filtros."}
+                            message="No hay alarmas que coincidan con los filtros seleccionados."
                         />
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-border">
-                                <thead className="bg-background">
-                                    <tr>
-                                        <SortableHeader columnKey="timestamp" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort}/>
-                                        <SortableHeader columnKey="alarmType" title="Tipo de Alarma" sortConfig={sortConfig} onSort={requestSort}/>
-                                        <SortableHeader columnKey="severity" title="Severidad" sortConfig={sortConfig} onSort={requestSort}/>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Estado</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-surface divide-y divide-border">
-                                    {sortedAlarms.map(alarm => (
-                                        <tr key={alarm.id}>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-text-secondary">
-                                                {new Date(alarm.timestamp).toLocaleString('es-AR')}
-                                            </td>
-                                            <td className="px-4 py-3 text-sm text-text-primary font-medium">
-                                                {alarm.alarmType}
-                                                {alarm.description && (
-                                                    <p className="text-xs text-text-secondary truncate max-w-xs">{alarm.description}</p>
+                           <table className="min-w-full divide-y divide-border">
+                               <thead className="bg-background">
+                                   <tr>
+                                       <SortableHeader columnKey="timestamp" title="Fecha y Hora" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="alarmType" title="Tipo de Alarma" sortConfig={sortConfig} onSort={requestSort} />
+                                       <SortableHeader columnKey="severity" title="Severidad" sortConfig={sortConfig} onSort={requestSort} />
+                                       <th className="px-4 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Descripción</th>
+                                       <th className="relative px-4 py-3"><span className="sr-only">Acciones</span></th>
+                                   </tr>
+                               </thead>
+                               <tbody className="bg-surface divide-y divide-border">
+                                   {sortedAlarms.map(alarm => (
+                                       <tr key={alarm.id} className={cn({ 'bg-amber-50': !alarm.isResolved && alarm.severity === 'warning', 'bg-red-50': !alarm.isResolved && alarm.severity === 'critical' })}>
+                                           <td className={`${commonTableClasses.cell} text-text-secondary`}>{new Date(alarm.timestamp).toLocaleString('es-AR')}</td>
+                                           <td className={`${commonTableClasses.cell} text-text-primary font-medium`}>{alarm.alarmType}</td>
+                                           <td className={commonTableClasses.cell}><Badge className={getSeverityBadgeClass(alarm.severity)}>{alarm.severity.toUpperCase()}</Badge></td>
+                                           <td className={`${commonTableClasses.cell} text-text-primary max-w-sm truncate`}>{alarm.description}</td>
+                                           <td className={`${commonTableClasses.cell} text-right`}>
+                                                {!alarm.isResolved && !alarm.isCustom && (
+                                                    <Button variant="outline" size="sm" onClick={() => handleCreateTask(alarm)}>
+                                                        <WrenchScrewdriverIcon className="h-4 w-4 mr-1" />
+                                                        Crear Tarea
+                                                    </Button>
                                                 )}
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                                <Badge className={getSeverityBadgeClass(alarm.severity)}>{alarm.severity}</Badge>
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                                <Badge className={alarm.isResolved ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning'}>
-                                                    {alarm.isResolved ? 'Resuelta' : 'Pendiente'}
-                                                </Badge>
-                                            </td>
-                                             <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="sm" 
-                                                    onClick={() => handleCreateTask(alarm)}
-                                                    disabled={!alarm.equipoId}
-                                                    aria-label="Crear tarea de mantenimiento"
-                                                >
-                                                    <WrenchScrewdriverIcon className="h-4 w-4 mr-1"/>
-                                                    Crear Tarea
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                           </td>
+                                       </tr>
+                                   ))}
+                               </tbody>
+                           </table>
                         </div>
                     )}
                 </CardContent>

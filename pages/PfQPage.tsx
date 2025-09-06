@@ -162,22 +162,24 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
 );
 
 // --- Zod Schemas ---
+// FIX: Refactored Zod schema to use valid syntax for required fields and number coercion, resolving multiple TypeScript errors.
 const fosTacSchema = z.object({
   equipment: z.string().min(1, "Debe seleccionar un equipo."),
   date: z.string().min(1, "La fecha es requerida."),
-  ph: z.number().min(0, "El pH no puede ser negativo.").max(14, "El pH no puede ser mayor a 14.").optional(),
-  vol1: z.number().nonnegative("El volumen no puede ser negativo."),
-  vol2: z.number().nonnegative("El volumen no puede ser negativo."),
+  ph: z.coerce.number({invalid_type_error: "Debe ser un número."}).min(0, "El pH debe ser mayor o igual a 0.").max(14, "El pH no puede ser mayor a 14.").optional(),
+  vol1: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El volumen no puede ser negativo."),
+  vol2: z.coerce.number({invalid_type_error: "Debe ser un número."}).nonnegative("El volumen no puede ser negativo."),
 }).refine(data => data.vol2 >= data.vol1, {
   message: 'El Volumen 2 no puede ser menor que el Volumen 1.',
   path: ['vol2'],
 });
 type FosTacFormData = z.infer<typeof fosTacSchema>;
 
+// FIX: Refactored Zod schema to use valid syntax for enums, required fields, and number coercion, resolving multiple TypeScript errors.
 const additiveSchema = z.object({
     additive_date: z.string().min(1, "La fecha es requerida."),
     additive: z.enum(['BICKO', 'HIMAX', 'CAL', 'OTROS']),
-    additive_quantity: z.number().positive("La cantidad debe ser un número positivo."),
+    additive_quantity: z.coerce.number({invalid_type_error: "Debe ser un número."}).positive("La cantidad debe ser un número positivo."),
     additive_bio: z.string().min(1, "Debe seleccionar un biodigestor."),
 });
 type AdditiveFormData = z.infer<typeof additiveSchema>;
