@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Page from '../components/Page';
-import { Card, CardContent } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Label } from '../components/ui/Label';
@@ -11,10 +11,20 @@ import { supabase } from '../services/supabaseClient';
 import type { Database } from '../types/database';
 import { PlusCircleIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { exportToPdf } from '../lib/utils';
+import EmptyState from '../components/EmptyState';
+import { ClipboardDocumentListIcon } from '@heroicons/react/24/solid';
 
-type MonitoreoDetalle = Database['public']['Tables']['monitoreos_ambientales_detalle']['Row'] & {
+type Monitoreo = Database['public']['Tables']['monitoreos_ambientales']['Row'];
+type MonitoreoDetalle = Database['public']['Tables']['monitoreos_ambientales_detalle']['Row'];
+
+type EnrichedMonitoreo = Monitoreo & {
+    monitoreos_ambientales_detalle: MonitoreoDetalle[];
+};
+
+type ChartDataPoint = MonitoreoDetalle & {
     monitoreos_ambientales: { fecha_monitoreo: string } | null;
 };
+
 type MonitoreoDetalleInsert = Database['public']['Tables']['monitoreos_ambientales_detalle']['Insert'];
 
 interface DetalleConIdTemporal extends Omit<MonitoreoDetalleInsert, 'monitoreo_id'> {
@@ -57,24 +67,37 @@ const EnvironmentPage: React.FC = () => {
     const [unidad, setUnidad] = useState('');
     const [limiteNormativo, setLimiteNormativo] = useState('');
 
-    // Chart state
-    const [chartData, setChartData] = useState<MonitoreoDetalle[]>([]);
+    // History and Chart state
+    const [history, setHistory] = useState<EnrichedMonitoreo[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(true);
+    const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
     const [chartParameter, setChartParameter] = useState<string>('');
     const [chartLoading, setChartLoading] = useState(true);
-    const [chartError, setChartError] = useState<string | null>(null);
+
+    const fetchHistory = useCallback(async () => {
+        setHistoryLoading(true);
+        try {
+            const { data, error } = await supabase
+                .from('monitoreos_ambientales')
+                .select('*, monitoreos_ambientales_detalle(*)')
+                .order('fecha_monitoreo', { ascending: false })
+                .limit(10);
+            if (error) throw error;
+            setHistory(data || []);
+        } catch (err: any) {
+            setMessage(`Error al cargar el historial: ${err.message}`);
+        } finally {
+            setHistoryLoading(false);
+        }
+    }, []);
 
     const fetchChartData = useCallback(async () => {
         setChartLoading(true);
-        setChartError(null);
         try {
             const { data, error } = await supabase
                 .from('monitoreos_ambientales_detalle')
-                .select(`
-                    valor,
-                    limite_normativo,
-                    parametro_medido,
-                    monitoreos_ambientales ( fecha_monitoreo )
-                `)
+                .select(`*, monitoreos_ambientales ( fecha_monitoreo )`)
+                .order('created_at', { ascending: false })
                 .limit(500);
 
             if (error) throw error;
@@ -82,7 +105,7 @@ const EnvironmentPage: React.FC = () => {
             const oneYearAgo = new Date();
             oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-            const recentData = (data as MonitoreoDetalle[]).filter(d => {
+            const recentData = (data as ChartDataPoint[]).filter(d => {
                 if (!d.monitoreos_ambientales) return false;
                 return new Date(d.monitoreos_ambientales.fecha_monitoreo).getTime() >= oneYearAgo.getTime();
             });
@@ -93,20 +116,21 @@ const EnvironmentPage: React.FC = () => {
             }
 
         } catch (err: any) {
-            setChartError(err.message);
+            setMessage(`Error al cargar datos del gráfico: ${err.message}`);
         } finally {
             setChartLoading(false);
         }
     }, [chartParameter]);
 
     useEffect(() => {
+        fetchHistory();
         fetchChartData();
-    }, [fetchChartData]);
+    }, [fetchHistory, fetchChartData]);
 
     const { parameterOptions, processedChartData } = useMemo(() => {
         if (!chartData) return { parameterOptions: [], processedChartData: [] };
         
-        const options = [...new Set(chartData.map(d => d.parametro_medido))];
+        const options = [...new Set(chartData.map(d => d.parametro_medido).filter(Boolean))];
         
         const sortedAndFilteredData = chartData
             .filter(d => d.parametro_medido === chartParameter && d.monitoreos_ambientales)
@@ -158,10 +182,18 @@ const EnvironmentPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        
+        if (details.length === 0) {
+            setMessage('Error: Debe añadir al menos un parámetro medido para guardar el monitoreo.');
+            return;
+        }
+
         setIsLoading(true);
         setMessage('');
 
         try {
+            const lastAddedParam = details.length > 0 ? details[details.length - 1].parametro_medido : null;
+            
             const { data: monitoreoData, error: monitoreoError } = await supabase
                 .from('monitoreos_ambientales')
                 .insert({
@@ -186,12 +218,18 @@ const EnvironmentPage: React.FC = () => {
             }
 
             setMessage('Monitoreo guardado con éxito!');
-            // Reset form
+            
             setDate(new Date().toISOString().split('T')[0]);
             setMonitoringType('Emisiones');
             setObservations('');
             setDetails([]);
-            fetchChartData(); // Refresh chart data
+            
+            await fetchHistory();
+            await fetchChartData();
+
+            if (lastAddedParam) {
+                setChartParameter(lastAddedParam);
+            }
 
         } catch (error: any) {
             setMessage(`Error al guardar: ${error.message}`);
@@ -282,8 +320,60 @@ const EnvironmentPage: React.FC = () => {
           </form>
         </CardContent>
       </Card>
+      
+      <Card>
+        <CardHeader><CardTitle>Historial de Monitoreos Recientes</CardTitle></CardHeader>
+        <CardContent>
+            {historyLoading ? (
+                <p className="text-center text-text-secondary py-4">Cargando historial...</p>
+            ) : history.length === 0 ? (
+                <EmptyState
+                    icon={<ClipboardDocumentListIcon className="mx-auto h-12 w-12 text-text-secondary" />}
+                    title="No hay monitoreos"
+                    message="Aún no se han guardado registros de monitoreo ambiental."
+                />
+            ) : (
+                <div className="space-y-4">
+                    {history.map(item => (
+                        <div key={item.id} className="p-4 border border-border rounded-lg bg-background/50">
+                             <div className="flex justify-between items-center mb-3 pb-3 border-b border-border">
+                                <div>
+                                    <p className="font-semibold text-text-primary">{item.tipo_monitoreo}</p>
+                                    <p className="text-sm text-text-secondary">{new Date(item.fecha_monitoreo + 'T00:00:00').toLocaleDateString('es-AR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                </div>
+                            </div>
+                            
+                            {(item.monitoreos_ambientales_detalle || []).length > 0 && (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-3">
+                                    {(item.monitoreos_ambientales_detalle).map(d => (
+                                        <div key={d.id} className="bg-surface p-2 rounded-md border border-border/50 text-center shadow-sm">
+                                            <p className="text-xs font-medium text-text-secondary truncate">{d.parametro_medido}</p>
+                                            <p className="text-lg font-bold text-primary">{d.valor}</p>
+                                            <p className="text-xs text-text-secondary">{d.unidad_medida}</p>
+                                            {d.limite_normativo != null && (
+                                                <p className={`text-xs mt-1 ${ d.valor != null && d.valor > d.limite_normativo ? 'text-error font-semibold' : 'text-text-secondary/80'}`}>
+                                                    Límite: {d.limite_normativo}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
 
-      <Card className="mt-6">
+                            {item.observaciones && (
+                                <div className="mt-3 pt-3 border-t border-border">
+                                    <p className="text-sm font-semibold text-text-secondary mb-1">Observaciones:</p>
+                                    <p className="text-sm text-text-primary italic">{item.observaciones}</p>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
               <h3 className="text-lg font-semibold text-text-primary">Tendencia Anual de Parámetros</h3>
@@ -311,8 +401,6 @@ const EnvironmentPage: React.FC = () => {
           </div>
           {chartLoading ? (
               <div className="text-center text-text-secondary py-10">Cargando datos del gráfico...</div>
-          ) : chartError ? (
-               <div className="text-center text-red-500 py-10">{`Error al cargar el gráfico: ${chartError}`}</div>
           ) : processedChartData.length === 0 ? (
               <div className="text-center text-text-secondary py-10">
                   {parameterOptions.length > 0 ? `No hay datos para el parámetro "${chartParameter}".` : 'No hay datos de monitoreo para mostrar.'}

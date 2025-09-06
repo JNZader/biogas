@@ -232,8 +232,20 @@ if (supabaseUrl && supabaseAnonKey) {
      // Add any other tables that might be needed for the mock
     ingresos_viaje_camion: [],
     aditivos_biodigestor: [],
-    monitoreos_ambientales: [],
-    monitoreos_ambientales_detalle: [],
+    monitoreos_ambientales: [
+        { id: 1, fecha_monitoreo: '2025-09-06', tipo_monitoreo: 'Emisiones', observaciones: 'Condiciones normales de operación, viento del SO a 15 km/h.', planta_id: 1, usuario_operador_id: 1 },
+        { id: 2, fecha_monitoreo: '2025-09-05', tipo_monitoreo: 'Calidad de Agua', observaciones: 'Muestra tomada del efluente principal.', planta_id: 1, usuario_operador_id: 1 },
+        { id: 3, fecha_monitoreo: '2025-09-04', tipo_monitoreo: 'Ruido Perimetral', observaciones: 'Medición en el límite sur de la planta.', planta_id: 1, usuario_operador_id: 1 },
+    ],
+    monitoreos_ambientales_detalle: [
+        { id: 1, monitoreo_id: 1, parametro_medido: 'NOx', valor: 15.2, unidad_medida: 'ppm', limite_normativo: 50 },
+        { id: 2, monitoreo_id: 1, parametro_medido: 'PM2.5', valor: 22.5, unidad_medida: 'µg/m³', limite_normativo: 50 },
+        { id: 3, monitoreo_id: 1, parametro_medido: 'CO', valor: 5.1, unidad_medida: 'ppm', limite_normativo: 10 },
+        { id: 4, monitoreo_id: 2, parametro_medido: 'pH', valor: 7.8, unidad_medida: '', limite_normativo: 9 },
+        { id: 5, monitoreo_id: 2, parametro_medido: 'DBO5', valor: 180, unidad_medida: 'mg/L', limite_normativo: 250 },
+        { id: 6, monitoreo_id: 2, parametro_medido: 'DQO', valor: 350, unidad_medida: 'mg/L', limite_normativo: 500 },
+        { id: 7, monitoreo_id: 3, parametro_medido: 'Ruido Diurno', valor: 55, unidad_medida: 'dB', limite_normativo: 65 },
+    ],
     tipos_muestra: [
         {id: 1, nombre_tipo_muestra: 'Sustrato Sólido'},
         {id: 2, nombre_tipo_muestra: 'Sustrato Líquido'},
@@ -281,6 +293,13 @@ if (supabaseUrl && supabaseAnonKey) {
                  usuarios: usuarios.find(u => u.id === up.usuario_id) || null,
              }));
         }
+        if (tableName === 'monitoreos_ambientales' && selectStr.includes('monitoreos_ambientales_detalle')) {
+             const detalles = mockDatabase['monitoreos_ambientales_detalle'];
+             return result.map(m => ({
+                 ...m,
+                 monitoreos_ambientales_detalle: detalles.filter(d => d.monitoreo_id === m.id) || [],
+             }));
+        }
         // Add more mock join handlers as needed for other parts of the app
         return result;
     }
@@ -316,7 +335,16 @@ if (supabaseUrl && supabaseAnonKey) {
             });
             const p = Promise.resolve({ data: items, error: null });
             (p as any).select = () => p;
-            (p as any).single = () => p;
+            (p as any).single = () => new Promise(resolve => {
+                p.then(result => {
+                    if (result.error) {
+                        resolve({ data: null, error: result.error });
+                    } else {
+                        const singleData = result.data && result.data.length > 0 ? result.data[0] : null;
+                        resolve({ data: singleData, error: null });
+                    }
+                });
+            });
             return p;
         },
         update: (newData: any) => {
